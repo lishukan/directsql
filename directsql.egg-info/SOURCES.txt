@@ -1,0 +1,10 @@
+README.md
+setup.py
+directsql/__init__.py
+directsql/mysql_model.py
+directsql/sqlhandler.py
+directsql.egg-info/PKG-INFO
+directsql.egg-info/SOURCES.txt
+directsql.egg-info/dependency_links.txt
+directsql.egg-info/requires.txt
+directsql.egg-info/top_level.txt
