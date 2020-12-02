@@ -7,9 +7,9 @@ import time
 import random
 import uuid
 import logging
+import sqlalchemy
 
-
-class SqlGenerater(object):
+class SqlGenerator(object):
     """
     该类下的方法的返回值必须为两个 
     第一个是sql，第二个是参数
@@ -22,10 +22,25 @@ class SqlGenerater(object):
         sql = "select COLUMN_NAME from information_schema.COLUMNS where TABLE_NAME=%s order by COLUMN_NAME;"
         return sql, (table_name,)
 
-    @staticmethod  # 默认只查询id,暂只支持 = ， 不支持like、大于、小于等查询
-    def generate_query_sql(table, condition, columns_u_need='id', limit=None):
+    
+    @staticmethod
+    def get_columns_and_params(condition: dict, equal=False, and_join=False):
+        join_str = ',' if not and_join else ' AND '
+        key_s, params = zip(*condition.items())
+        if equal:
+            columns_condi = join_str.join(['`' + k + '`' + '=%s' for k in key_s])
+        else:
+            columns_condi = join_str.join(['`' + k + '`' for k in key_s])
+        return columns_condi, params
+
+    @classmethod
+    def generate_select_sql(cls, columns_u_need='id', table=None, where_condition=None, group_by:str =None, order_by:str=None, limit:int=None,offset=None):
         """
-        生成查询sql
+        设要查询两个字段id和name，则 columns_u_need 为（'id','name'） / ['id','name']  /  'id,name'
+        要查询所有字段 使用  columns_u_need='*' 即可
+
+        where_condition 为字典 或字符串
+
         """
         if isinstance(columns_u_need, (tuple, list)):
             columns = ','.join(columns_u_need)
@@ -34,61 +49,68 @@ class SqlGenerater(object):
         else:
             raise TypeError('error ! colnmns_you_need must be str or tuple or list ')
 
-        param = None
-        where_list = []
-        if isinstance(condition, dict):
-            param = tuple()
-            for key, value in condition.items():
-                where_list.append(key+'=%s')
-                param = param + (value,)
-            where_str = ' AND '.join(where_list)
-        else:
-            raise TypeError("sql condition must be dict,for example : {'id':798456}")
-        sql = "SELECT {} FROM {} WHERE {} ".format(columns, table, where_str)
-        if limit:
-            sql = sql+' limit {} ;'.format(limit)
-        # print(sql,param)
-        return sql, param
+        sql = "select {} from {} ".format(columns_u_need,table)
+        params=None
+        if where_condition:
+            if isinstance(where_condition, dict):
+                where_str, params = cls.get_columns_and_params(where_condition, equal=True, and_join=True)
+            else:
+                where_str = where_condition
+            sql +="where {}".format(where_str)
+        
+        for key, fs in ((group_by, 'group by'), (order_by, 'order by'), (limit, 'limit'), (offset, 'offset')):
+            if key:
+                sql += ' {} {}'.format(fs,key)
+        
+
+        return sql,params
 
 
-    @staticmethod
-    def generate_insert_sql(table, condition, ignroe=False):
+
+    @classmethod
+    def generate_insert_sql_single(cls,table, condition:dict, ignroe=False):
         """
         插入单条数据,condition为字典形式的数据
         """
         sql = 'INSERT INTO {} ({}) VALUES ({});' if not ignroe else 'INSERT IGNORE INTO {} ({}) VALUES ({});'
+        columns, params =cls.get_columns_and_params(condition)
+        formast_tag=','.join(['%s'] * len(params))
+        sql = sql.format(table, columns, formast_tag)
+        return sql, params
 
-        s_s = list()
-        param = tuple()
-        for key, value in condition.items():
-            columns.append('`'+key+'`')
-            s_s.append('%s')
-            param = param + (value,)
-
-        columns = ','.join(columns)
-        s_s = ','.join(s_s)
-        sql = sql.format(table, columns, s_s)
-        #print(sql,param )
-        return sql, param
 
     @classmethod
-    def generate_update_sql(cls, table, condition, ID, primary='id'):
+    def generate_insert_sql_many(cls, table, data_list, columns_order=None,ignore=False,fill_none=False):
+        """
+        columns_order 一般来说不需要传入，但是当data_list中的数据字段很多，而插入的字段是 指定的N个时。就需要指定需要插入的字段
+        另外 可能会存在部分字段，一些数据没有。  fill_none =True 就会给不存在的字段赋值为None
+        """
+        sql = 'INSERT INTO {} ({}) VALUES ({});' if not ignroe else 'INSERT IGNORE INTO {} ({}) VALUES ({});'
+        if not columns_order:
+            columns_order = data_list[0].keys()
+        tags = ('%({})s'.format(col) for col in columns_order)
+        format_tag = ','.join(tags)
+        
+
+
+        
+
+
+    @classmethod
+    def generate_update_sql_by_primary(cls, table, condition, ID, primary='id',limit=1):
         """
         更新单条数据,condition为字典形式的数据
         """
-        sql = 'UPDATE {} SET {} WHERE {}='+str(ID)+' limit 1;'
-        columns_condi, param = cls.get_columns_and_params(condition, update=True)
+        sql = 'UPDATE {} SET {} WHERE {}='+str(ID)
+        columns_condi, param = cls.get_columns_and_params(condition, equal=True)
         sql = sql.format(table, columns_condi, primary)
+        if not limit:
+            pass
+        else:
+            sql+=' limit {};'.format(limit)    
         return sql, param
 
-    @staticmethod
-    def get_columns_and_params(condition: dict, update=False):
-        key_s, params = zip(*condition.items())
-        if update:
-            columns_condi = ','.join(['`' + k + '`' + '=%s' for k in key_s])
-        else:
-            columns_condi = ','.join(['`' + k + '`' for k in key_s])
-        return columns_condi, params
+
 
     @staticmethod
     def generate_replace_into_sql(table, data_list, columns_order=None, many=True):
@@ -129,12 +151,21 @@ class SqlGenerater(object):
         return sql, param
 
 
-class SqlActor(SqlGenerater):
+# class SqlActor(SqlGenerater):
 
-    def select(self, columns_be_need='*', table=None,  condition=None, limit=None):
-        """
-        select name,age from student where  teacher='JackMa' limit 20
-        --->    SqlActor().select(['name','age'],'student',{'taecher':'JackMa',20})
+#     def select(self, columns_be_need='*', table=None,  condition=None, limit=None):
+#         """
+#         select name,age from student where  teacher='JackMa' limit 20
+#         --->    SqlActor().select(['name','age'],'student',{'taecher':'JackMa',20})
 
-        """
-        pass
+#         """
+#         if not table:
+#             raise ValueError("You must assign table name to query")
+#         sql,param=self.generate_select_sql(columns_be_need,table,)
+
+if __name__ == "__main__":
+    Model = SqlGenerator()
+    #sql, params = Model.generate_select_sql('id', 'ths_industry_area', {'securitycode': '000725','a':8}, group_by='securitycode', order_by='id', limit=10, offset=0)
+    sql,params=Model.generate_insert_sql('test',{'name':'lishukan','age':18},ignroe=True)
+    print(sql,params)
+    
