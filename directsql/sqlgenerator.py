@@ -15,6 +15,8 @@ class SqlGenerator(object):
     该类下的方法的返回值必须为两个 
     第一个是sql，第二个是参数
     """
+
+
     @classmethod
     def get_all_column_sql(cls, table_name, dbname=None):
         """返回对应表的所有字段，形式为列表"""
@@ -40,7 +42,7 @@ class SqlGenerator(object):
         return columns_condi, params
 
     @classmethod
-    def generate_select_sql(cls, columns_u_need='id', table=None, where_condition=None, group_by: str = None, order_by: str = None, limit: int = None, offset=None):
+    def generate_select_sql(cls, columns='id', table=None, where=None, group_by: str = None, order_by: str = None, limit: int = None, offset=None):
         """
         设要查询两个字段id和name，则 columns_u_need 为（'id','name'） / ['id','name']  /  'id,name'
         要查询所有字段 使用  columns_u_need='*' 即可
@@ -48,20 +50,20 @@ class SqlGenerator(object):
         where_condition 为字典 或字符串
 
         """
-        if isinstance(columns_u_need, (tuple, list)):
-            columns = ','.join(columns_u_need)
-        elif isinstance(columns_u_need, str):
-            columns = columns_u_need
+        if isinstance(columns, (tuple, list)):
+            columns = ','.join(columns)
+        elif isinstance(columns, str):
+            columns = columns
         else:
             raise TypeError('error ! colnmns_you_need must be str or tuple or list ')
 
-        sql = "select {} from {} ".format(columns_u_need, table)
+        sql = "select {} from {} ".format(columns, table)
         params = None
-        if where_condition:
-            if isinstance(where_condition, dict):
-                where_str, params = cls.get_columns_and_params(where_condition, equal=True, and_join=True)
+        if where:
+            if isinstance(where, dict):
+                where_str, params = cls.get_columns_and_params(where, equal=True, and_join=True)
             else:
-                where_str = where_condition
+                where_str = where
             sql += "where {}".format(where_str)
 
         for key, fs in ((group_by, 'group by'), (order_by, 'order by'), (limit, 'limit'), (offset, 'offset')):
@@ -89,7 +91,7 @@ class SqlGenerator(object):
 
         data_list 中的 数据必须为字典形式
         """
-        if not isinstance(data_list, (tuple, list)):
+        if not isinstance(data_list, list):
             data_list = (data_list,)
         sql = 'INSERT INTO {} ({}) VALUES ({});' if not ignore else 'INSERT IGNORE INTO {} ({}) VALUES ({});'
         if not columns_order:
