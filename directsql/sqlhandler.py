@@ -25,6 +25,12 @@ class SqlGenerator(object):
     
     @staticmethod
     def get_columns_and_params(condition: dict, equal=False, and_join=False):
+        """
+        传入字典，返回 字段和参数
+        equal 为True 时 加上 =%s , --->  update  xx set a=%s,b=%s.....
+        and join  用于 where  a=%s AND B=%s 
+
+        """
         join_str = ',' if not and_join else ' AND '
         key_s, params = zip(*condition.items())
         if equal:
@@ -151,17 +157,7 @@ class SqlGenerator(object):
         return sql, param
 
 
-# class SqlActor(SqlGenerater):
 
-#     def select(self, columns_be_need='*', table=None,  condition=None, limit=None):
-#         """
-#         select name,age from student where  teacher='JackMa' limit 20
-#         --->    SqlActor().select(['name','age'],'student',{'taecher':'JackMa',20})
-
-#         """
-#         if not table:
-#             raise ValueError("You must assign table name to query")
-#         sql,param=self.generate_select_sql(columns_be_need,table,)
 
 if __name__ == "__main__":
     Model = SqlGenerator()
