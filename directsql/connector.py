@@ -62,6 +62,7 @@ class SimpleConnector(SqlGenerator):
         finally:
             return result, count
 
+
     def execute_sql(self, sql, param=None,cursor_type=None):
         """
         # cursor_type为游标类型（默认返回值为元祖类型），可选字典游标，将返回数据的字典形式
@@ -72,29 +73,35 @@ class SimpleConnector(SqlGenerator):
         conn = self.get_connection()
         cursor = conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
         result = count = False
+        print(sql)
+        print(param)
         try:
             count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)  # 得到受影响的数据条数
             conn.commit()
             result = cursor.fetchall()  # 此方法应直接返回 所有结果，不应去考虑fetchone还是fetchmany的问题。这是传入的sql中就应该限定的
         except:
+            print("---------------------------------")
+            print(sql)
+            print(param)
+            print("---------------------------------")
             conn.rollback()
             traceback.print_exc()
         finally:
             return result, count
 
-    def do_transaction(self, sql_params_list: list, cursor_type=None, no_params=False):
+    def do_transaction(self, sql_params: list, cursor_type=None, no_params=False):
         """
-        sql_params_list 内的元素类型为 tuple  对应 ---> （sql,params）  ， 其中 如果params 类型为list，则会使用启用游标的executemany 去执行
+        sql_params 内的元素类型为 tuple  对应 ---> （sql,params）  ， 其中 如果params 类型为list，则会使用启用游标的executemany 去执行
         """
         conn = self.get_connection()
         cursor = conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
         result = count = False
         try:
             if no_params:
-                for sql in sql_params_list:
+                for sql in sql_params:
                     count = cursor.execute(sql)
             else:
-                for sql, param in sql_params_list:
+                for sql, param in sql_params:
                     count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
             result = cursor.fetchall()
             conn.commit()
@@ -104,10 +111,47 @@ class SimpleConnector(SqlGenerator):
         finally:
             return result, count
 
-    def select(self, *args,**kwargs):
+    def select(self, *args, **kwargs):
+        """
+        仅支持 简单的查询
+        """
         sql,param=self.generate_select_sql( *args,**kwargs)
-        return self.execute_sql(sql,param)
+        return self.execute_sql(sql, param)
+    
+    def insert(self, *args, **kwargs):
+        """
+        此方法将直接返回 游标的 result和 count
+        """
+        sql, param = self.generate_insert_sql(*args, **kwargs)
+        return self.execute_sql(sql, param)
 
+    def insert_into(self, *args, **kwargs):
+        """
+        此方法将返回 插入后的 id
+        """
+        sql, param = self.generate_insert_sql(*args, **kwargs)
+        conn = self.get_connection()
+        cursor =  conn.cursor()
+        result = count = False
+        try:
+            cursor.execute(sql, param)  # 得到受影响的数据条数
+            cursor.execute("SELECT LAST_INSERT_ID() AS id")
+            result = cursor.fetchall()[0][0]
+            conn.commit()
+        except:
+            conn.rollback()
+            traceback.print_exc()
+        finally:
+            return result
+
+
+    def update_by_primary(self, *args, **kwargs):
+        sql,param=self.generate_update_sql_by_primary( *args,**kwargs)
+        return self.execute_sql(sql, param)
+
+    def update(self, *args, **kwargs):
+        sql, param = self.generate_update_sql(*args, **kwargs)
+        return self.execute_sql(sql, param)
 
 class SimplePoolConnector(SimpleConnector):
 

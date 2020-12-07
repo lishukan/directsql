@@ -19,4 +19,8 @@ if __name__ == "__main__":
     # sql, params = gentor.generate_insert_many_sql('test', data_list, ignore=True)
     # print(sql,params)
     # print(conn.execute_sql(sql,params))
-    print(conn.select('*','test',group_by='name'))
+    #print(conn.select('*','test',group_by='name'))
+    
+    #print(conn.insert('test',{'name': 'xuzhihao', 'age': 24}))
+    #print(conn.update_by_primary('test', {'name': 'xuzhihao', 'age': 987}, pri_value=17))
+    print(conn.update('test',{'name': 'sdsd', 'age': 87},condition={'age':24},columns_order={'name'} ))

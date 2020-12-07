@@ -8,7 +8,7 @@ import random
 import uuid
 import logging
 import sqlalchemy
-
+import  easymysql
 
 class SqlGenerator(object):
     """
@@ -39,7 +39,7 @@ class SqlGenerator(object):
             columns_condi = join_str.join(['`' + k + '`' + '=%s' for k in key_s])
         else:
             columns_condi = join_str.join(['`' + k + '`' for k in key_s])
-        return columns_condi, params
+        return columns_condi, tuple(params)
 
     @classmethod
     def generate_select_sql(cls, columns='id', table=None, where=None, group_by: str = None, order_by: str = None, limit: int = None, offset=None):
@@ -73,26 +73,32 @@ class SqlGenerator(object):
         return sql, params
 
     @classmethod
-    def generate_insert_single_sql(cls, table, condition: dict, ignroe=False,on_duplicate_key:str =None):
+    def generate_insert_sql(cls, table, data: dict or list,columns_order=None, ignroe=False,on_duplicate_key:str =None):
         """
+        columns_order 为 可迭代对象 list/tuple/set/...
         插入单条数据,condition为字典形式的数据
         """
         sql = 'INSERT INTO {} ({}) VALUES ({});' if not ignroe else 'INSERT IGNORE INTO {} ({}) VALUES ({});'
-        columns, params = cls.get_columns_and_params(condition)
-        formast_tag = ','.join(['%s'] * len(params))
-        sql = sql.format(table, columns, formast_tag)
-        return sql, params
+        if isinstance(data, dict):
+            if not columns_order:
+                columns_order=data.keys()
+        else:
+            if not columns_order:
+                columns_order=data[0].keys()
+            
+        format_tags = ','.join(('%({})s'.format(col) for col in columns_order))
+        final_sql = sql.format(table, ','.join(columns_order), format_tags)
+        return final_sql, data
 
     @classmethod
     def generate_insert_many_sql(cls, table, data_list:list,columns_order=None,ignore=False,on_duplicate_key:str=None):
         """
+        columns_order 为 可迭代对象 list/tuple/set/...
         columns_order 一般来说不需要传入，但是当data_list中的数据字段很多，而插入的字段是 指定的N个时。就需要指定需要插入的字段
         另外 可能会存在部分字段，一些数据没有。  fill_none =True 就会给不存在的字段赋值为None
 
         data_list 中的 数据必须为字典形式
         """
-        if not isinstance(data_list, list):
-            data_list = (data_list,)
         sql = 'INSERT INTO {} ({}) VALUES ({});' if not ignore else 'INSERT IGNORE INTO {} ({}) VALUES ({});'
         if not columns_order:
             columns_order = data_list[0].keys()
@@ -105,20 +111,68 @@ class SqlGenerator(object):
 
 
     @classmethod
-    def generate_update_sql_by_primary(cls, table, condition, pri_value, primary='id', limit=1):
+    def generate_update_sql_by_primary(cls, table, data:dict, pri_value, columns_order=None,primary:str='id', limit=1):
         """
         更新单条数据,condition为字典形式的数据
+        columns_order 为 可迭代对象 list/tuple/set/...
         """
         sql = 'UPDATE {} SET {} WHERE `{}`=%s'
-        columns_condi, param = cls.get_columns_and_params(condition, equal=True)
+        if not columns_order:
+            columns_order = data.keys()
+            
+        param = tuple(data[k] for k in columns_order) 
+        columns_condi = ','.join(['`' + k + '`' + '=%s' for k in columns_order])
+            
         sql = sql.format(table, columns_condi, primary)
-        param.append(pri_value)
+        param+=(pri_value,)
         if not limit:
             pass
         else:
             sql += ' limit %s;'.format(limit)
-            param.append(limit)
+            param+=(limit,)
         return sql, param
+
+    @classmethod
+    def generate_update_sql(cls, table, data: dict, condition, columns_order:None or list=None, limit=None):
+        """
+        columns_order 为需要更新的字段
+        data= {'name':'jack', 'age':18,'school':'MIT'  }
+        condition 为dict时，会根据这个dict 转换为对应的where条件
+        如果为其他类型，会将condition中的 key 在data上对应的值 取出，作为键值对并转换为where条件
+        condition --> dict : {'age':24}                     --->  update xx set name='jack',age=18,school='MIT' where age=24
+                  --> tuple or list or set :  ('age',) / ['age']/{'age'}    --->  update xx set name='jack',school='MIT' where age=18
+                --> str :  age=88   update xx set name='jack',age=18,school='MIT' where age=88
+        """
+        sql = 'UPDATE {} SET {} WHERE {}'
+        all_columns = data.keys()
+
+        if isinstance(condition, str):
+            condition_keys = set()
+            where_tags=condition
+        else:
+            if isinstance(condition, dict):
+                condition_keys = condition.keys()
+                condition_param=tuple(condition[k] for k in condition_keys)
+            else:
+                condition_keys = set(condition)
+                condition_param = tuple(data[k] for k in condition_keys)
+                
+            where_tags = ' AND '.join(('`{}`=%s'.format(col) for col in condition_keys))
+            
+
+        if not columns_order:#需要更新的字段
+            columns_order = all_columns -condition_keys
+        else:
+            columns_order = set(columns_order)
+
+        set_tags = ','.join(('`{}`=%s'.format(col, col) for col in columns_order))
+        param = tuple(data[k] for k in columns_order)
+        param+=condition_param
+        if limit:
+            param+=(limit,)
+        final_sql = sql.format(table, set_tags, where_tags)
+        return final_sql,param
+
 
     # @staticmethod
     # def generate_replace_into_sql(table, data_list, columns_order=None, many=True):
