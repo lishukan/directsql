@@ -12,16 +12,14 @@ import logging
 import traceback
 from sqlgenerator import SqlGenerator
 
-import   logging
+import logging
 logger = logging.getLogger(__name__)
-logger.setLevel(level = logging.INFO)
+logger.setLevel(level=logging.INFO)
 handler = logging.StreamHandler()
 handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - directsql.%(name)s.py -[%(levelname)s] - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-
-
 
 
 class SimpleConnector(SqlGenerator):
@@ -46,24 +44,23 @@ class SimpleConnector(SqlGenerator):
             conn.ping(reconnect=True)
             return conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
 
-    def query(self, sql, param=None, cursor_type=None,):
-        """
-        仅仅用作执行查询语句，不提交不回滚
-        """
-        if 'select' not in sql:
-            self.logger.warning(" the function-->'query' will do not commit ,it should be  only support select action ")
-        cursor = self.get_cursor(cursor_type)
-        result = count = False
-        try:
-            count = cursor.execute(sql, param)
-            result = cursor.fetchall()  # 此方法应直接返回 所有结果，不应去考虑fetchone还是fetchmany的问题。这是传入的sql中就应该限定的
-        except:
-            traceback.print_exc()
-        finally:
-            return result, count
+    # def query(self, sql, param=None, cursor_type=None,):
+    #     """
+    #     仅仅用作执行查询语句，不提交不回滚
+    #     """
+    #     if 'select' not in sql:
+    #         self.logger.warning(" the function-->'query' will do not commit ,it should be  only support select action ")
+    #     cursor = self.get_cursor(cursor_type)
+    #     result = count = False
+    #     try:
+    #         count = cursor.execute(sql, param)
+    #         result = cursor.fetchall()  # 此方法应直接返回 所有结果，不应去考虑fetchone还是fetchmany的问题。这是传入的sql中就应该限定的
+    #     except:
+    #         traceback.print_exc()
+    #     finally:
+    #         return result, count
 
-
-    def execute_sql(self, sql, param=None,cursor_type=None):
+    def execute_sql(self, sql, param=None, cursor_type=None):
         """
         # cursor_type为游标类型（默认返回值为元祖类型），可选字典游标，将返回数据的字典形式
         # 此方法应直接返回 所有结果，不应去考虑fetchone还是fetchmany的问题。这是传入的sql中就应该限定的
@@ -88,6 +85,28 @@ class SimpleConnector(SqlGenerator):
             traceback.print_exc()
         finally:
             return result, count
+
+    def execute_with_return_id(self, sql, param=None):
+        """
+        此方法会返回插入的最后一行的id
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        result = False
+        try:
+            r = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
+            cursor.execute("SELECT LAST_INSERT_ID() AS id")
+            result = cursor.fetchall()[0][0]
+            conn.commit()
+        except:
+            print("---------------------------------")
+            print(sql)
+            print(param)
+            print("---------------------------------")
+            conn.rollback()
+            traceback.print_exc()
+        finally:
+            return result
 
     def do_transaction(self, sql_params: list, cursor_type=None, no_params=False):
         """
@@ -115,43 +134,43 @@ class SimpleConnector(SqlGenerator):
         """
         仅支持 简单的查询
         """
-        sql,param=self.generate_select_sql( *args,**kwargs)
-        return self.execute_sql(sql, param)
-    
-    def insert(self, *args, **kwargs):
-        """
-        此方法将直接返回 游标的 result和 count
-        """
-        sql, param = self.generate_insert_sql(*args, **kwargs)
+        sql, param = self.generate_select_sql(*args, **kwargs)
         return self.execute_sql(sql, param)
 
-    def insert_into(self, *args, **kwargs):
+    def insert_into(self, table, data: dict or list, columns_order=None, ignroe=False, on_duplicate_key_update: str = None,return_id=False):
         """
         此方法将返回 插入后的 id
         """
-        sql, param = self.generate_insert_sql(*args, **kwargs)
-        conn = self.get_connection()
-        cursor =  conn.cursor()
-        result = count = False
-        try:
-            cursor.execute(sql, param)  # 得到受影响的数据条数
-            cursor.execute("SELECT LAST_INSERT_ID() AS id")
-            result = cursor.fetchall()[0][0]
-            conn.commit()
-        except:
-            conn.rollback()
-            traceback.print_exc()
-        finally:
-            return result
+        sql, param = self.generate_insert_sql(table,data,columns_order,ignroe,on_duplicate_key_update)
+        return self.execute_with_return_id(sql, param) if return_id else self.execute_sql(sql, param)[1]
 
+    def replace(self, *args, **kwargs):
+        sql, param = self.generate_replace_into_sql(*args, **kwargs)
+        return self.execute_sql(sql, param)[1]
+
+    def replace_into(self,*args, **kwargs):
+        sql, param = self.generate_replace_into_sql(*args, **kwargs)
+        return  self.execute_sql(sql, param)
 
     def update_by_primary(self, *args, **kwargs):
-        sql,param=self.generate_update_sql_by_primary( *args,**kwargs)
-        return self.execute_sql(sql, param)
+        sql, param = self.generate_update_sql_by_primary(*args, **kwargs)
+        return self.execute_sql(sql, param)[1]
 
     def update(self, *args, **kwargs):
+        """
+        update action  only return affected_rows
+        """
         sql, param = self.generate_update_sql(*args, **kwargs)
-        return self.execute_sql(sql, param)
+        return self.execute_sql(sql, param)[1]
+
+    def delete_by_primary(self, table, pri_value, primary='id'):
+        sql = "DELETE FROM {} WHERE `{}`=%s ".format(table, primary)
+        return self.execute_sql(sql, (pri_value,))[1]
+
+    def delete(self, *args, **kwargs):
+        sql, param = self.generate_delete_sql(*args, **kwargs)
+        return self.execute_sql(sql, param)[1]
+
 
 class SimplePoolConnector(SimpleConnector):
 
