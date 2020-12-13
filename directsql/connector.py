@@ -4,13 +4,18 @@ import traceback
 from typing import Iterable
 import pymysql
 from pymysql.cursors import DictCursor
-from DBUtils.PooledDB import PooledDB
+try:
+    from dbutils.pooled_db import PooledDB
+except:
+    from DBUtils.PooledDB import PooledDB
+
 import time
 import random
 import uuid
 import logging
 import traceback
 from sqlgenerator import SqlGenerator
+import psycopg2 as pg2
 
 import logging
 logger = logging.getLogger(__name__)
@@ -137,20 +142,20 @@ class SimpleConnector(SqlGenerator):
         sql, param = self.generate_select_sql(*args, **kwargs)
         return self.execute_sql(sql, param)
 
-    def insert_into(self, table, data: dict or list, columns_order=None, ignroe=False, on_duplicate_key_update: str = None,return_id=False):
+    def insert_into(self, table, data: dict or list, columns_order=None, ignroe=False, on_duplicate_key_update: str = None, return_id=False):
         """
         此方法将返回 插入后的 id
         """
-        sql, param = self.generate_insert_sql(table,data,columns_order,ignroe,on_duplicate_key_update)
+        sql, param = self.generate_insert_sql(table, data, columns_order, ignroe, on_duplicate_key_update)
         return self.execute_with_return_id(sql, param) if return_id else self.execute_sql(sql, param)[1]
 
     def replace(self, *args, **kwargs):
         sql, param = self.generate_replace_into_sql(*args, **kwargs)
         return self.execute_sql(sql, param)[1]
 
-    def replace_into(self,*args, **kwargs):
+    def replace_into(self, *args, **kwargs):
         sql, param = self.generate_replace_into_sql(*args, **kwargs)
-        return  self.execute_sql(sql, param)
+        return self.execute_sql(sql, param)
 
     def update_by_primary(self, *args, **kwargs):
         sql, param = self.generate_update_sql_by_primary(*args, **kwargs)
@@ -181,20 +186,52 @@ class SimplePoolConnector(SimpleConnector):
         return self.connection_pool.connection()
 
 
-class PoolConnector(SimplePoolConnector):
+class MysqlConnectionPool(SimplePoolConnector):
 
     def __init__(self, host, user, password, database, port=3306, charset='utf8', re_create=True, **kwargs):
         """
-        re_create=True 则会
+        # todo re_create=True 则会
+        mincached 最小的连接数（实例化时最开始就实例化这个数的连接）
+
+        连接断开时，连接池能感受到
         """
-        self.host = host = host
-        self.port = port
-        self.user = user
-        self.database = database
-        self.password = password
-        connargs = {"host": self.host, "user": self.user, "password": self.password, "database": self.database, 'port': self.port, "charset": self.charset,
+        self._host = host = host
+        self._port = port
+        self._user = user
+        self._database = database
+        self._password = password
+        self._charset = charset
+        connargs = {"host": self._host, "user": self._user, "password": self._password, "database": self._database, 'port': self._port, "charset": self._charset,
                     "creator": pymysql, "mincached": 3, "maxcached": 8, "maxshared": 5, "maxconnections": 10, "blocking": True, "maxusage": 0}
 
         connargs.update(kwargs)
 
         self.connection_pool = PooledDB(**connargs)
+
+
+class PgsqlConnectionPool(SimplePoolConnector):
+
+    def __init__(self, host, user, password, database, port=5432, charset='utf8', re_create=True, **kwargs):
+        """
+        # todo re_create=True 则会
+        mincached 最小的连接数（实例化时最开始就实例化这个数的连接）
+
+        连接断开时，连接池能感受到
+        """
+        self._host = host = host
+        self._port = port
+        self._user = user
+        self._database = database
+        self._password = password
+        self._charset = charset
+        connargs = {"host": self._host, "user": self._user, "password": self._password, "database": self._database, 'port': self._port, "charset": self._charset,
+                    "creator": pg2, "mincached": 3, "maxcached": 8, "maxshared": 5, "maxconnections": 10, "blocking": True, "maxusage": 0}
+
+        connargs.update(kwargs)
+
+        self.connection_pool = PooledDB(**connargs)
+
+
+if __name__ == "__main__":
+
+    pass
