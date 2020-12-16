@@ -14,7 +14,7 @@ import random
 import uuid
 import logging
 import traceback
-from sqlgenerator import SqlGenerator
+from sqlgenerator import SqlGenerator, MysqlSqler
 import psycopg2 as pg2
 
 import logging
@@ -25,6 +25,15 @@ handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - directsql.%(name)s.py -[%(levelname)s] - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+
+class SqlHandler(object):
+
+    def get_connection(self):
+        raise NotImplementedError("get_connection function should be called on child object ")
+
+    def get_cursor(self):
+        raise NotImplementedError("get_cursor function should be called on child object ")
 
 
 class SimpleConnector(SqlGenerator):
@@ -44,26 +53,9 @@ class SimpleConnector(SqlGenerator):
             conn = self.get_connection()
             return conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
         except Exception as e:
-            print(e)
             self.logger.warning("ping and reconnect ...")
             conn.ping(reconnect=True)
             return conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
-
-    # def query(self, sql, param=None, cursor_type=None,):
-    #     """
-    #     仅仅用作执行查询语句，不提交不回滚
-    #     """
-    #     if 'select' not in sql:
-    #         self.logger.warning(" the function-->'query' will do not commit ,it should be  only support select action ")
-    #     cursor = self.get_cursor(cursor_type)
-    #     result = count = False
-    #     try:
-    #         count = cursor.execute(sql, param)
-    #         result = cursor.fetchall()  # 此方法应直接返回 所有结果，不应去考虑fetchone还是fetchmany的问题。这是传入的sql中就应该限定的
-    #     except:
-    #         traceback.print_exc()
-    #     finally:
-    #         return result, count
 
     def execute_sql(self, sql, param=None, cursor_type=None):
         """
@@ -75,17 +67,15 @@ class SimpleConnector(SqlGenerator):
         conn = self.get_connection()
         cursor = conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
         result = count = False
-        print(sql)
-        print(param)
         try:
             count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)  # 得到受影响的数据条数
             conn.commit()
             result = cursor.fetchall()  # 此方法应直接返回 所有结果，不应去考虑fetchone还是fetchmany的问题。这是传入的sql中就应该限定的
         except:
-            print("---------------------------------")
-            print(sql)
-            print(param)
-            print("---------------------------------")
+            self.logger.info("---------------------------------")
+            self.logger.error(sql)
+            self.logger.error(param)
+            self.logger.info("---------------------------------")
             conn.rollback()
             traceback.print_exc()
         finally:
@@ -104,10 +94,10 @@ class SimpleConnector(SqlGenerator):
             result = cursor.fetchall()[0][0]
             conn.commit()
         except:
-            print("---------------------------------")
-            print(sql)
-            print(param)
-            print("---------------------------------")
+            self.logger.info("---------------------------------")
+            self.logger.error(sql)
+            self.logger.error(param)
+            self.logger.info("---------------------------------")
             conn.rollback()
             traceback.print_exc()
         finally:
@@ -149,13 +139,9 @@ class SimpleConnector(SqlGenerator):
         sql, param = self.generate_insert_sql(table, data, columns_order, ignroe, on_duplicate_key_update)
         return self.execute_with_return_id(sql, param) if return_id else self.execute_sql(sql, param)[1]
 
-    def replace(self, *args, **kwargs):
-        sql, param = self.generate_replace_into_sql(*args, **kwargs)
-        return self.execute_sql(sql, param)[1]
-
     def replace_into(self, *args, **kwargs):
         sql, param = self.generate_replace_into_sql(*args, **kwargs)
-        return self.execute_sql(sql, param)
+        return self.execute_sql(sql, param)[1]
 
     def update_by_primary(self, *args, **kwargs):
         sql, param = self.generate_update_sql_by_primary(*args, **kwargs)
@@ -177,6 +163,14 @@ class SimpleConnector(SqlGenerator):
         return self.execute_sql(sql, param)[1]
 
 
+class MysqlConnector(MysqlSqler, SimpleConnector):
+
+    def merge_into(self, *args, **kwargs):
+        sql, param = self.generate_merge_sql(*args, **kwargs)
+        return self.execute_sql(sql, param)[1]
+    
+
+
 class SimplePoolConnector(SimpleConnector):
 
     def __init__(self, *args, **kwargs):
@@ -186,7 +180,7 @@ class SimplePoolConnector(SimpleConnector):
         return self.connection_pool.connection()
 
 
-class MysqlConnectionPool(SimplePoolConnector):
+class MysqlPool(SimplePoolConnector,MysqlConnector):
 
     def __init__(self, host, user, password, database, port=3306, charset='utf8', re_create=True, **kwargs):
         """
@@ -209,7 +203,7 @@ class MysqlConnectionPool(SimplePoolConnector):
         self.connection_pool = PooledDB(**connargs)
 
 
-class PgsqlConnectionPool(SimplePoolConnector):
+class PostgrePool(SimplePoolConnector):
 
     def __init__(self, host, user, password, database, port=5432, charset='utf8', re_create=True, **kwargs):
         """
@@ -218,7 +212,7 @@ class PgsqlConnectionPool(SimplePoolConnector):
 
         连接断开时，连接池能感受到
         """
-        self._host = host = host
+        self._host = host
         self._port = port
         self._user = user
         self._database = database
@@ -230,8 +224,3 @@ class PgsqlConnectionPool(SimplePoolConnector):
         connargs.update(kwargs)
 
         self.connection_pool = PooledDB(**connargs)
-
-
-if __name__ == "__main__":
-
-    pass

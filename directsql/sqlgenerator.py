@@ -93,8 +93,8 @@ class SqlGenerator(object):
         """
         sql = 'INSERT INTO {} ({}) VALUES ({})' if not ignroe else 'INSERT IGNORE INTO {} ({}) VALUES ({})'
         if on_duplicate_key_update:
-            sql+=" on duplicate key update"
-        return cls._get_after_format_sql(sql,table,data,columns_order)
+            sql += (" on duplicate key update"+on_duplicate_key_update)
+        return cls._get_after_format_sql(sql, table, data, columns_order)
 
     @classmethod
     def generate_replace_into_sql(cls, table, data: dict or list, columns_order=None):
@@ -102,8 +102,7 @@ class SqlGenerator(object):
         columns_order  字段顺序。如果不传入，则取第一个data的 键集合
         """
         sql = 'REPLACE INTO {} ({}) VALUES ({}) '
-        return cls._get_after_format_sql(sql,table,data,columns_order)
-
+        return cls._get_after_format_sql(sql, table, data, columns_order)
 
     @classmethod
     def generate_update_sql_by_primary(cls, table, data: dict, pri_value, columns_order=None, primary: str = 'id'):
@@ -175,17 +174,25 @@ class SqlGenerator(object):
         return sql, params
 
 
+class MysqlSqler(SqlGenerator):
+
+    def generate_merge_sql(self, table, data, columns=None, need_merge_columns: list = None):
+        """
+        columns 为需要插入的字段
+        need_merge_columns 为 出现重复时需要更新的字段.如果不给值，将会把所有 columns 里的字段都更新
+        """
+        if isinstance(data, dict):
+            if not columns:
+                columns = data.keys()
+        else:
+            if not columns:
+                columns = data[0].keys()
+
+        format_tags = ','.join(('%({})s'.format(col) for col in columns))
+        if not need_merge_columns:
+            need_merge_columns = columns
+        update_str = ','.join(['`{}`=values({})'.format(col,col) for col in need_merge_columns])
+        sql = "insert into {} ({}) values({})  on duplicate key update {};"
+        return sql.format(table, ','.join(columns), format_tags, update_str), data
 
 
-
-
-if __name__ == "__main__":
-    Model = SqlGenerator()
-    #sql, params = Model.generate_select_sql('id', 'ths_industry_area', {'securitycode': '000725','a':8}, group_by='securitycode', order_by='id', limit=10, offset=0)
-    sql, params = Model.generate_insert_single_sql('test', {'name': 'lishukan', 'age': 18}, ignroe=True)
-    print(sql, params)
-    data_list = [
-        {'name': 'lishukan', 'age': 18},
-        {'name': 'jackma', 'age': 22}
-    ]
-    print(Model.generate_insert_many_sql('test', data_list, ignore=True))
