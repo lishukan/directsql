@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 import traceback
+import  re
 from typing import Iterable
 import pymysql
 from pymysql.cursors import DictCursor
@@ -14,7 +15,7 @@ import random
 import uuid
 import logging
 import traceback
-from sqlgenerator import SqlGenerator, MysqlSqler
+from .sqlgenerator import SqlGenerator, MysqlSqler
 import psycopg2 as pg2
 
 import logging
@@ -29,6 +30,9 @@ logger.addHandler(handler)
 
 class SqlHandler(object):
 
+
+        
+
     def get_connection(self):
         raise NotImplementedError("get_connection function should be called on child object ")
 
@@ -41,9 +45,38 @@ class SimpleConnector(SqlGenerator):
     logger = logger
 
     def __init__(self, **kwargs):
+        if kwargs.get('string', None):
+            connargs = self.get_conn_args_from_str(kwargs['string'])
+        
         connargs = {'user': 'root', 'port': 3306, 'charset': 'utf8'}
+        
+            
         connargs.update(kwargs)
         self.connector = pymysql.connect(**connargs)
+
+    def get_conn_args_from_str(self, string):
+        """
+        @param string,connect args on terminal ,for example: mysql -h127.0.0.1 -p1234  -uroot -p123456 -Dtest_base 
+        return a dict with connect args
+        { "host":"127.0.0.1","port":1234,"password":"123456","db":"test_base"  }
+        """
+        conn_args = dict()
+        patter_dict = {
+            "host": "-h([\d\.]+)",
+            "port": "-P(\d+)",
+            "user": "-u(\S+)",
+            "password": "-p(\S+)",
+            "db":"-D(\S+)",
+        }
+        for k, v in patter_dict.items():
+            result = re.findall(v, string)
+            number=len(result)
+            if number==1:
+                conn_args[k] = result[0]
+            else:
+                raise ValueError("invalid param got when using {} to regxp ".format(v))
+        
+        return conn_args
 
     def get_connection(self):
         return self.connector
@@ -168,7 +201,6 @@ class MysqlConnector(MysqlSqler, SimpleConnector):
     def merge_into(self, *args, **kwargs):
         sql, param = self.generate_merge_sql(*args, **kwargs)
         return self.execute_sql(sql, param)[1]
-    
 
 
 class SimplePoolConnector(SimpleConnector):
@@ -180,7 +212,7 @@ class SimplePoolConnector(SimpleConnector):
         return self.connection_pool.connection()
 
 
-class MysqlPool(SimplePoolConnector,MysqlConnector):
+class MysqlPool(SimplePoolConnector, MysqlConnector):
 
     def __init__(self, host, user, password, database, port=3306, charset='utf8', re_create=True, **kwargs):
         """
