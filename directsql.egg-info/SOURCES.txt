@@ -1,8 +1,9 @@
 README.md
 setup.py
 directsql/__init__.py
-directsql/mysql_model.py
-directsql/sqlhandler.py
+directsql/connector.py
+directsql/sqlgenerator.py
+directsql/test.py
 directsql.egg-info/PKG-INFO
 directsql.egg-info/SOURCES.txt
 directsql.egg-info/dependency_links.txt
