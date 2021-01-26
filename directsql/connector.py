@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 import traceback
 import  re
-from typing import Iterable
 import pymysql
 from pymysql.cursors import DictCursor
 try:
@@ -11,14 +10,10 @@ except:
     from DBUtils.PooledDB import PooledDB
 
 import time
-import random
-import uuid
-import logging
-import traceback
 from .sqlgenerator import SqlGenerator, MysqlSqler
 import psycopg2 as pg2
-
 import logging
+
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
 handler = logging.StreamHandler()

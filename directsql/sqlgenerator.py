@@ -1,13 +1,5 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
-import traceback
-from typing import Iterable
-import pymysql
-import time
-import random
-import uuid
-import logging
-import sqlalchemy
 
 
 class SqlGenerator(object):
