@@ -73,7 +73,7 @@ class SqlGenerator(object):
                 columns_order = data[0].keys()
 
         format_tags = ','.join(('%({})s'.format(col) for col in columns_order))
-        final_sql = init_sql.format(table, ','.join(columns_order), format_tags)
+        final_sql = init_sql.format(table, '`'+'`,`'.join(columns_order)+'`', format_tags)
         return final_sql, data
 
     @classmethod
@@ -183,8 +183,8 @@ class MysqlSqler(SqlGenerator):
         format_tags = ','.join(('%({})s'.format(col) for col in columns))
         if not need_merge_columns:
             need_merge_columns = columns
-        update_str = ','.join(['`{}`=values({})'.format(col,col) for col in need_merge_columns])
+        update_str = ','.join(['`{}`=values(`{}`)'.format(col,col) for col in need_merge_columns])
         sql = "insert into {} ({}) values({})  on duplicate key update {};"
-        return sql.format(table, ','.join(columns), format_tags, update_str), data
+        return sql.format(table, '`'+'`,`'.join(columns)+'`', format_tags, update_str), data
 
 
