@@ -3,7 +3,7 @@
 import traceback
 import  re
 import pymysql
-from pymysql.cursors import DictCursor
+from pymysql.cursors import DictCursor,SSCursor,SSDictCursor
 try:
     from dbutils.pooled_db import PooledDB
 except:
@@ -31,7 +31,7 @@ class SqlHandler(object):
     def get_connection(self):
         raise NotImplementedError("get_connection function should be called on child object ")
 
-    def get_cursor(self):
+    def get_cursor(self,connection=None):
         raise NotImplementedError("get_cursor function should be called on child object ")
 
 
@@ -76,14 +76,46 @@ class SimpleConnector(SqlGenerator):
     def get_connection(self):
         return self.connector
 
-    def get_cursor(self, cursor_type=None):
+    def get_cursor(self, cursor_type=None,connection=None):
         try:
-            conn = self.get_connection()
-            return conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
+            conn = self.get_connection() if not connection else connection
+            return self._choose_cursor(cursor_type,conn)
         except Exception as e:
             self.logger.warning("ping and reconnect ...")
             conn.ping(reconnect=True)
-            return conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
+            return self._choose_cursor(cursor_type,conn)
+
+    def _choose_cursor(self, cursor_type, conn):
+        if cursor_type=='dict':
+            return conn.cursor(DictCursor)
+        elif cursor_type == 'ss':
+            return conn.cursor(SSCursor)
+        elif cursor_type == 'ssdict':
+            return conn.cursor(SSDictCursor)
+        return conn.cursor()
+
+    def read_ss_result(self, sql, param=None, cursor_type='ss'):
+        conn = self.get_connection()
+        cursor = conn.cursor(SSCursor) if cursor_type == 'ss' else conn.cursor(SSDictCursor)  #此处只支持流式游标
+        result = count = False
+        try:
+            count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)  # 得到受影响的数据条数
+            #conn.commit() 
+            result = cursor.fetchone()
+            while result is not None:
+                yield result
+                result = cursor.fetchone()
+            cursor.close()
+        except:
+            self.logger.info("----ss-----------------------------")
+            self.logger.error(sql)
+            self.logger.error(param)
+            self.logger.info("---------------------------------")
+            conn.rollback()
+            traceback.print_exc()
+        finally:
+            return result, count
+
 
     def execute_sql(self, sql, param=None, cursor_type=None):
         """
@@ -93,7 +125,7 @@ class SimpleConnector(SqlGenerator):
         如果参数是列表类型，则使用executemany方法 
         """
         conn = self.get_connection()
-        cursor = conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
+        cursor = conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor() #此处由于需要返回查询结果集，所以不支持流式游标
         result = count = False
         try:
             count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)  # 得到受影响的数据条数
