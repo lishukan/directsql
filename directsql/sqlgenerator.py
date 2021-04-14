@@ -48,7 +48,7 @@ class SqlGenerator(object):
         else:
             raise TypeError('error ! colnmns_you_need must be str or tuple or list ')
 
-        sql = "select {} from {} ".format(columns, table)
+        sql = "select {} from `{}` ".format(columns, table)
         params = None
         if where:
             if isinstance(where, dict):
@@ -83,7 +83,7 @@ class SqlGenerator(object):
         插入单条数据,condition为字典形式的数据
         data 必须为字典 或者 为一个元素类型为字典的列表
         """
-        sql = 'INSERT INTO {} ({}) VALUES ({})' if not ignroe else 'INSERT IGNORE INTO {} ({}) VALUES ({})'
+        sql = 'INSERT INTO `{}` ({}) VALUES ({})' if not ignroe else 'INSERT IGNORE INTO {} ({}) VALUES ({})'
         if on_duplicate_key_update:
             sql += (" on duplicate key update"+on_duplicate_key_update)
         return cls._get_after_format_sql(sql, table, data, columns_order)
@@ -93,7 +93,7 @@ class SqlGenerator(object):
         """
         columns_order  字段顺序。如果不传入，则取第一个data的 键集合
         """
-        sql = 'REPLACE INTO {} ({}) VALUES ({}) '
+        sql = 'REPLACE INTO `{}` ({}) VALUES ({}) '
         return cls._get_after_format_sql(sql, table, data, columns_order)
 
     @classmethod
@@ -102,7 +102,7 @@ class SqlGenerator(object):
         更新单条数据,condition为字典形式的数据
         columns_order 为 可迭代对象 list/tuple/set/...
         """
-        sql = 'UPDATE {} SET {} WHERE `{}`=%s'
+        sql = 'UPDATE `{}` SET {} WHERE `{}`=%s'
         if not columns_order:
             columns_order = data.keys()
 
@@ -124,7 +124,7 @@ class SqlGenerator(object):
                   --> tuple or list or set :  ('age',) / ['age']/{'age'}    --->  update xx set name='jack',school='MIT' where age=18
                 --> str :  age=88   update xx set name='jack',age=18,school='MIT' where age=88
         """
-        sql = 'UPDATE {} SET {} WHERE {}'
+        sql = 'UPDATE `{}` SET {} WHERE {}'
         all_columns = data.keys()
 
         if isinstance(condition, str):
@@ -155,7 +155,7 @@ class SqlGenerator(object):
 
     @classmethod
     def generate_delete_sql(cls, table, where: str or dict, limit: int = 0):
-        sql = "DELETE FROM {} WHERE {} "
+        sql = "DELETE FROM `{}` WHERE {} "
         if isinstance(where, dict):
             where_str, params = cls.get_columns_and_params(where, equal=True, and_join=True)
         else:
@@ -184,7 +184,7 @@ class MysqlSqler(SqlGenerator):
         if not need_merge_columns:
             need_merge_columns = columns
         update_str = ','.join(['`{}`=values(`{}`)'.format(col,col) for col in need_merge_columns])
-        sql = "insert into {} ({}) values({})  on duplicate key update {};"
+        sql = "insert into `{}` ({}) values({})  on duplicate key update {};"
         return sql.format(table, '`'+'`,`'.join(columns)+'`', format_tags, update_str), data
 
 
