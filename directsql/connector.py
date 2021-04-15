@@ -38,16 +38,28 @@ class SqlHandler(object):
 class SimpleConnector(SqlGenerator):
 
     logger = logger
+    charset='utf8'
+    def _set_conn_var(self, **kwargs):
+        if kwargs.get('string_arg', None):
+            connargs = self.get_conn_args_from_str(kwargs['string_arg'])
+        else:
+            connargs = {'user': 'root', 'port': 3306, 'charset': 'utf8'}
+            connargs.update(kwargs)
+
+        connargs['port']=int(connargs['port'])
+        self.host = connargs['host']
+        self.user = connargs['user']
+        self.port = int(connargs['port'])
+        self.password = connargs['password']
+        self.charset = connargs.get('charset', 'utf8')
+        self.database = connargs['database']
+        return connargs
 
     def __init__(self, **kwargs):
-        if kwargs.get('string', None):
-            connargs = self.get_conn_args_from_str(kwargs['string'])
-        
-        connargs = {'user': 'root', 'port': 3306, 'charset': 'utf8'}
-        
-            
-        connargs.update(kwargs)
+        connargs=self._set_conn_var(**kwargs)
         self.connector = pymysql.connect(**connargs)
+
+
 
     def get_conn_args_from_str(self, string):
         """
@@ -61,7 +73,7 @@ class SimpleConnector(SqlGenerator):
             "port": "-P(\d+)",
             "user": "-u(\S+)",
             "password": "-p(\S+)",
-            "db":"-D(\S+)",
+            "database":"-D(\S+)",
         }
         for k, v in patter_dict.items():
             result = re.findall(v, string)
@@ -232,8 +244,20 @@ class MysqlConnector(MysqlSqler, SimpleConnector):
 
 class SimplePoolConnector(SimpleConnector):
 
+    _creator=None
+
     def __init__(self, *args, **kwargs):
-        self.connection_pool = PooledDB(*args, **kwargs)
+
+
+        args_dict=self._set_conn_var(**kwargs)
+
+        connargs = {"host": self.host, "user": self.user, "password": self.password, "database": self.database, 'port': self.port, "charset": self.charset,
+                    "creator": self._creator, "mincached": 3, "maxcached": 8, "maxshared": 5, "maxconnections": 10, "blocking": True, "maxusage": 0}
+        
+        connargs.update(args_dict)
+
+        self.connection_pool = PooledDB(**connargs)
+
 
     def get_connection(self):
         return self.connection_pool.connection()
@@ -241,45 +265,12 @@ class SimplePoolConnector(SimpleConnector):
 
 class MysqlPool(SimplePoolConnector, MysqlConnector):
 
-    def __init__(self, host, user, password, database, port=3306, charset='utf8', re_create=True, **kwargs):
-        """
-        # todo re_create=True 则会
-        mincached 最小的连接数（实例化时最开始就实例化这个数的连接）
+    port = 3306
+    _creator=pymysql
 
-        连接断开时，连接池能感受到
-        """
-        self._host = host = host
-        self._port = port
-        self._user = user
-        self._database = database
-        self._password = password
-        self._charset = charset
-        connargs = {"host": self._host, "user": self._user, "password": self._password, "database": self._database, 'port': self._port, "charset": self._charset,
-                    "creator": pymysql, "mincached": 3, "maxcached": 8, "maxshared": 5, "maxconnections": 10, "blocking": True, "maxusage": 0}
-
-        connargs.update(kwargs)
-
-        self.connection_pool = PooledDB(**connargs)
 
 
 class PostgrePool(SimplePoolConnector):
+    port = 5432
+    _creator=pg2
 
-    def __init__(self, host, user, password, database, port=5432, charset='utf8', re_create=True, **kwargs):
-        """
-        # todo re_create=True 则会
-        mincached 最小的连接数（实例化时最开始就实例化这个数的连接）
-
-        连接断开时，连接池能感受到
-        """
-        self._host = host
-        self._port = port
-        self._user = user
-        self._database = database
-        self._password = password
-        self._charset = charset
-        connargs = {"host": self._host, "user": self._user, "password": self._password, "database": self._database, 'port': self._port, "charset": self._charset,
-                    "creator": pg2, "mincached": 3, "maxcached": 8, "maxshared": 5, "maxconnections": 10, "blocking": True, "maxusage": 0}
-
-        connargs.update(kwargs)
-
-        self.connection_pool = PooledDB(**connargs)
