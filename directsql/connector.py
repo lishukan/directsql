@@ -10,7 +10,7 @@ except:
     from DBUtils.PooledDB import PooledDB
 
 import time
-from .sqlgenerator import SqlGenerator, MysqlSqler
+from sqlgenerator import SqlGenerator, MysqlSqler
 import psycopg2 as pg2
 import logging
 
@@ -24,9 +24,6 @@ logger.addHandler(handler)
 
 
 class SqlHandler(object):
-
-
-        
 
     def get_connection(self):
         raise NotImplementedError("get_connection function should be called on child object ")
@@ -109,7 +106,6 @@ class SimpleConnector(SqlGenerator):
     def read_ss_result(self, sql, param=None, cursor_type='ss'):
         conn = self.get_connection()
         cursor = conn.cursor(SSCursor) if cursor_type == 'ss' else conn.cursor(SSDictCursor)  #此处只支持流式游标
-        result = count = False
         try:
             count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)  # 得到受影响的数据条数
             #conn.commit() 
@@ -119,14 +115,11 @@ class SimpleConnector(SqlGenerator):
                 result = cursor.fetchone()
             cursor.close()
         except:
-            self.logger.info("----ss-----------------------------")
-            self.logger.error(sql)
-            self.logger.error(param)
-            self.logger.info("---------------------------------")
             conn.rollback()
             traceback.print_exc()
-        finally:
-            return result, count
+            return False
+        
+            
 
 
     def execute_sql(self, sql, param=None, cursor_type=None):
@@ -240,6 +233,15 @@ class MysqlConnector(MysqlSqler, SimpleConnector):
     def merge_into(self, *args, **kwargs):
         sql, param = self.generate_merge_sql(*args, **kwargs)
         return self.execute_sql(sql, param)[1]
+    
+    @property
+    def tables(self):
+        if hasattr(self,'_tables'):
+            return self._tables
+        all_tables, count = self.execute_sql("show tables")
+        setattr(self, '_tables', [d[0] for d in all_tables])
+        return self._tables
+        
 
 
 class SimplePoolConnector(SimpleConnector):
