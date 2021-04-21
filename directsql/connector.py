@@ -139,7 +139,7 @@ class SimpleConnector(SqlGenerator):
         except:
             self.logger.info("---------------------------------")
             self.logger.error(sql)
-            self.logger.error(param)
+            #self.logger.error(param)
             self.logger.info("---------------------------------")
             conn.rollback()
             traceback.print_exc()
@@ -161,7 +161,7 @@ class SimpleConnector(SqlGenerator):
         except:
             self.logger.info("---------------------------------")
             self.logger.error(sql)
-            self.logger.error(param)
+            #self.logger.error(param)
             self.logger.info("---------------------------------")
             conn.rollback()
             traceback.print_exc()

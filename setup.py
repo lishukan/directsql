@@ -2,9 +2,9 @@ from setuptools import setup, find_packages
   
 setup(  
     name = 'directsql',  
-    version = '0.1.6',
+    version = '0.1.7',
     # keywords = ('chinesename',),  
-    description = '增加了 table 属性,流式游标返回False或None',  
+    description = '取消打印 sql参数',  
     license = 'MIT License',  
     packages = ['directsql'],  # 要打包的项目文件夹
     include_package_data=True,   # 自动打包文件夹内所有数据
