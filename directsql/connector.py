@@ -11,7 +11,7 @@ except:
 
 import time
 from sqlgenerator import SqlGenerator, MysqlSqler
-import psycopg2 as pg2
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -168,7 +168,7 @@ class SimpleConnector(SqlGenerator):
         finally:
             return result
 
-    def do_transaction(self, sql_params: list, cursor_type=None, no_params=False):
+    def do_transaction(self, sql_params: list, cursor_type=None):
         """
         sql_params 内的元素类型为 tuple  对应 ---> （sql,params）  ， 其中 如果params 类型为list，则会使用启用游标的executemany 去执行
         """
@@ -176,12 +176,8 @@ class SimpleConnector(SqlGenerator):
         cursor = conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
         result = count = False
         try:
-            if no_params:
-                for sql in sql_params:
-                    count = cursor.execute(sql)
-            else:
-                for sql, param in sql_params:
-                    count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
+            for sql, param in sql_params:
+                count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
             result = cursor.fetchall()
             conn.commit()
         except:
@@ -190,48 +186,48 @@ class SimpleConnector(SqlGenerator):
         finally:
             return result, count
 
-    def select(self, *args, **kwargs):
+    def select(self, columns='id', table=None, where=None, group_by: str = None, order_by: str = None, limit: int = None, offset=None,cursor_type=None):
         """
         仅支持 简单的查询
         """
-        sql, param = self.generate_select_sql(*args, **kwargs)
-        return self.execute_sql(sql, param)
+        sql, param = self.generate_select_sql(columns, table, where, group_by, order_by, limit, offset)
+        return self.execute_sql(sql, param,cursor_type)
 
-    def insert_into(self, table, data: dict or list, columns_order=None, ignroe=False, on_duplicate_key_update: str = None, return_id=False):
+    def insert_into(self, table, data: dict or list, columns=None, ignore=False, on_duplicate_key_update: str = None, return_id=False):
         """
         此方法将返回 插入后的 id
         """
-        sql, param = self.generate_insert_sql(table, data, columns_order, ignroe, on_duplicate_key_update)
+        sql, param = self.generate_insert_sql(table, data, columns, ignore, on_duplicate_key_update)
         return self.execute_with_return_id(sql, param) if return_id else self.execute_sql(sql, param)[1]
 
-    def replace_into(self, *args, **kwargs):
-        sql, param = self.generate_replace_into_sql(*args, **kwargs)
+    def replace_into(self,table, data: dict or list, columns=None):
+        sql, param = self.generate_replace_into_sql(table,data,columns)
         return self.execute_sql(sql, param)[1]
 
-    def update_by_primary(self, *args, **kwargs):
-        sql, param = self.generate_update_sql_by_primary(*args, **kwargs)
+    def update_by_primary(self, table, data: dict, pri_value, columns=None, primary: str = 'id'):
+        sql, param = self.generate_update_sql_by_primary(table, data, pri_value, columns, primary)
         return self.execute_sql(sql, param)[1]
 
-    def update(self, *args, **kwargs):
+    def update(self,table, data: dict, where, columns: None or list = None, limit=None):
         """
         update action  only return affected_rows
         """
-        sql, param = self.generate_update_sql(*args, **kwargs)
+        sql, param = self.generate_update_sql(table, data, where, columns , limit)
         return self.execute_sql(sql, param)[1]
 
     def delete_by_primary(self, table, pri_value, primary='id'):
         sql = "DELETE FROM {} WHERE `{}`=%s ".format(table, primary)
         return self.execute_sql(sql, (pri_value,))[1]
 
-    def delete(self, *args, **kwargs):
-        sql, param = self.generate_delete_sql(*args, **kwargs)
+    def delete(self,table, where: str or dict, limit: int = 0):
+        sql, param = self.generate_delete_sql(table, where, limit)
         return self.execute_sql(sql, param)[1]
 
 
-class MysqlConnector(MysqlSqler, SimpleConnector):
+class MysqlConnection(MysqlSqler, SimpleConnector):
 
-    def merge_into(self, *args, **kwargs):
-        sql, param = self.generate_merge_sql(*args, **kwargs)
+    def merge_into(self, table, data:dict or list, columns=None, need_merge_columns: list = None):
+        sql, param = self.generate_merge_sql( table, data, columns, need_merge_columns)
         return self.execute_sql(sql, param)[1]
     
     @property
@@ -252,10 +248,16 @@ class SimplePoolConnector(SimpleConnector):
 
 
         args_dict=self._set_conn_var(**kwargs)
-
+        #默认参数
         connargs = {"host": self.host, "user": self.user, "password": self.password, "database": self.database, 'port': self.port, "charset": self.charset,
                     "creator": self._creator, "mincached": 3, "maxcached": 8, "maxshared": 5, "maxconnections": 10, "blocking": True, "maxusage": 0}
-        
+        # mincached : 启动时开启的空连接数量(0代表开始时不创建连接)
+        # maxcached : 连接池最大可共享连接数量(0代表不闲置连接池大小)
+        # maxshared : 共享连接数允许的最大数量(0代表所有连接都是专用的)如果达到了最大数量,被请求为共享的连接将会被共享使用
+        # maxconnecyions : 创建连接池的最大数量(0代表不限制)
+        # blocking : 达到最大数量时是否阻塞(0或False代表返回一个错误<toMany......>; 其他代表阻塞直到连接数减少,连接被分配)
+        # maxusage : 单个连接的最大允许复用次数(0或False代表不限制的复用).当达到最大数时,连接会自动重新连接(关闭和重新打开)
+        # setsession : 用于传递到数据库的准备会话，如 [”set name UTF-8″]
         connargs.update(args_dict)
 
         self.connection_pool = PooledDB(**connargs)
@@ -265,14 +267,16 @@ class SimplePoolConnector(SimpleConnector):
         return self.connection_pool.connection()
 
 
-class MysqlPool(SimplePoolConnector, MysqlConnector):
+class MysqlPool(SimplePoolConnector, MysqlConnection):
 
     port = 3306
     _creator=pymysql
 
 
 
+
 class PostgrePool(SimplePoolConnector):
     port = 5432
+    import psycopg2 as pg2
     _creator=pg2
 

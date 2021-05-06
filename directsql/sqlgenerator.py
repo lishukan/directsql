@@ -64,59 +64,59 @@ class SqlGenerator(object):
         return sql, params
 
     @classmethod
-    def _get_after_format_sql(cls, init_sql, table, data, columns_order=None):
+    def _get_after_format_sql(cls, init_sql, table, data, columns=None):
         if isinstance(data, dict):
-            if not columns_order:
-                columns_order = data.keys()
+            if not columns:
+                columns = data.keys()
         else:
-            if not columns_order:
-                columns_order = data[0].keys()
+            if not columns:
+                columns = data[0].keys()
 
-        format_tags = ','.join(('%({})s'.format(col) for col in columns_order))
-        final_sql = init_sql.format(table, '`'+'`,`'.join(columns_order)+'`', format_tags)
+        format_tags = ','.join(('%({})s'.format(col) for col in columns))
+        final_sql = init_sql.format(table, '`'+'`,`'.join(columns)+'`', format_tags)
         return final_sql, data
 
     @classmethod
-    def generate_insert_sql(cls, table, data: dict or list, columns_order=None, ignroe=False, on_duplicate_key_update: str = None):
+    def generate_insert_sql(cls, table, data: dict or list, columns=None, ignore=False, on_duplicate_key_update: str = None):
         """
-        columns_order 为 可迭代对象 list/tuple/set/...
+        columns 为 可迭代对象 list/tuple/set/...
         插入单条数据,condition为字典形式的数据
         data 必须为字典 或者 为一个元素类型为字典的列表
         """
-        sql = 'INSERT INTO `{}` ({}) VALUES ({})' if not ignroe else 'INSERT IGNORE INTO {} ({}) VALUES ({})'
+        sql = 'INSERT INTO `{}` ({}) VALUES ({})' if not ignore else 'INSERT IGNORE INTO {} ({}) VALUES ({})'
         if on_duplicate_key_update:
-            sql += (" on duplicate key update"+on_duplicate_key_update)
-        return cls._get_after_format_sql(sql, table, data, columns_order)
+            sql += (" on duplicate key update "+on_duplicate_key_update)
+        return cls._get_after_format_sql(sql, table, data, columns)
 
     @classmethod
-    def generate_replace_into_sql(cls, table, data: dict or list, columns_order=None):
+    def generate_replace_into_sql(cls, table, data: dict or list, columns=None):
         """
-        columns_order  字段顺序。如果不传入，则取第一个data的 键集合
+        columns  字段顺序。如果不传入，则取第一个data的 键集合
         """
         sql = 'REPLACE INTO `{}` ({}) VALUES ({}) '
-        return cls._get_after_format_sql(sql, table, data, columns_order)
+        return cls._get_after_format_sql(sql, table, data, columns)
 
     @classmethod
-    def generate_update_sql_by_primary(cls, table, data: dict, pri_value, columns_order=None, primary: str = 'id'):
+    def generate_update_sql_by_primary(cls, table, data: dict, pri_value, columns=None, primary: str = 'id'):
         """
         更新单条数据,condition为字典形式的数据
-        columns_order 为 可迭代对象 list/tuple/set/...
+        columns 为 可迭代对象 list/tuple/set/...
         """
         sql = 'UPDATE `{}` SET {} WHERE `{}`=%s'
-        if not columns_order:
-            columns_order = data.keys()
+        if not columns:
+            columns = data.keys()
 
-        param = tuple(data[k] for k in columns_order)
-        columns_condi = ','.join(['`' + k + '`' + '=%s' for k in columns_order])
+        param = tuple(data[k] for k in columns)
+        columns_condi = ','.join(['`' + k + '`' + '=%s' for k in columns])
 
         sql = sql.format(table, columns_condi, primary)
         param += (pri_value,)
         return sql, param
 
     @classmethod
-    def generate_update_sql(cls, table, data: dict, condition, columns_order: None or list = None, limit=None):
+    def generate_update_sql(cls, table, data: dict, condition, columns: None or list = None, limit=None):
         """
-        columns_order 为需要更新的字段
+        columns 为需要更新的字段
         data= {'name':'jack', 'age':18,'school':'MIT'  }
         condition 为dict时，会根据这个dict 转换为对应的where条件
         如果为其他类型，会将condition中的 key 在data上对应的值 取出，作为键值对并转换为where条件
@@ -140,13 +140,13 @@ class SqlGenerator(object):
 
             where_tags = ' AND '.join(('`{}`=%s'.format(col) for col in condition_keys))
 
-        if not columns_order:  # 需要更新的字段
-            columns_order = all_columns - condition_keys
+        if not columns:  # 需要更新的字段
+            columns = all_columns - condition_keys
         else:
-            columns_order = set(columns_order)
+            columns = set(columns)
 
-        set_tags = ','.join(('`{}`=%s'.format(col, col) for col in columns_order))
-        param = tuple(data[k] for k in columns_order)
+        set_tags = ','.join(('`{}`=%s'.format(col, col) for col in columns))
+        param = tuple(data[k] for k in columns)
         param += condition_param
         if limit:
             param += (limit,)
@@ -172,13 +172,10 @@ class MysqlSqler(SqlGenerator):
         """
         columns 为需要插入的字段
         need_merge_columns 为 出现重复时需要更新的字段.如果不给值，将会把所有 columns 里的字段都更新
+        如果columns 都没有值，将会读取所有data的 键值对
         """
-        if isinstance(data, dict):
-            if not columns:
-                columns = data.keys()
-        else:
-            if not columns:
-                columns = data[0].keys()
+        if not columns:
+            columns = data.keys()  if isinstance(data, dict) else data[0].keys()
 
         format_tags = ','.join(('%({})s'.format(col) for col in columns))
         if not need_merge_columns:
