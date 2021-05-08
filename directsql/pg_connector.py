@@ -4,7 +4,7 @@ import traceback
 from .sqlgenerator import SqlGenerator
 from .connector import   SimpleConnector
 import re
-from psycopg2.extras import  DictCursor,DictConnection
+from psycopg2.extras import  DictCursor,DictConnection,RealDictCursor,RealDictConnection
 class PgSqlGenerator(SqlGenerator):
     """
     pgsql sql语句 拼接类
@@ -86,6 +86,7 @@ class PgConnection(PgSqlGenerator, SimpleConnector):
         """
         on_conflict_do_update  为字符串  ,这里有个坑，  pgsql 字符串要用 单引号
         """
+        
         sql, param = self.generate_insert_sql(table, data, columns, conflict,do_nothing, on_conflict_do_update)
         return self.execute_with_return_id(sql, param) if return_id else self.execute_sql(sql, param)[1]
 
@@ -96,7 +97,7 @@ class PgConnection(PgSqlGenerator, SimpleConnector):
     def execute_sql(self, sql, param=None, cursor_type=None):
         sql=sql.replace('`','"')  #上面的语句都是按照mysql 的转义字符来的，pg里统一换成 双引号
         conn = self.get_connection()
-        cursor = conn.cursor(cursor_factory=DictCursor) if cursor_type == 'dict' else conn.cursor()  #此处由于需要返回查询结果集，所以不支持流式游标
+        cursor = conn.cursor(cursor_factory=RealDictCursor) if cursor_type == 'dict' else conn.cursor()  #此处由于需要返回查询结果集，所以不支持流式游标
         
         result = count = False
         try:
