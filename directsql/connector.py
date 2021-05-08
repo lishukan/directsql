@@ -10,7 +10,7 @@ except:
     from DBUtils.PooledDB import PooledDB
 
 import time
-from sqlgenerator import SqlGenerator, MysqlSqler
+from .sqlgenerator import SqlGenerator, MysqlSqler
 
 import logging
 
@@ -28,8 +28,8 @@ class SqlHandler(object):
     def get_connection(self):
         raise NotImplementedError("get_connection function should be called on child object ")
 
-    def get_cursor(self,connection=None):
-        raise NotImplementedError("get_cursor function should be called on child object ")
+    # def get_cursor(self,connection=None):
+    #     raise NotImplementedError("get_cursor function should be called on child object ")
 
 
 class SimpleConnector(SqlGenerator):
@@ -66,11 +66,11 @@ class SimpleConnector(SqlGenerator):
         """
         conn_args = dict()
         patter_dict = {
-            "host": "-h([\d\.]+)",
-            "port": "-P(\d+)",
-            "user": "-u(\S+)",
-            "password": "-p(\S+)",
-            "database":"-D(\S+)",
+            "host": "-h\s*?([\d\.]+)",
+            "port": "-P\s*?(\d+)",
+            "user": "-u\s*?(\S+)",
+            "password": "-p\s*?(\S+)",
+            "database":"-D\s*?(\S+)",
         }
         for k, v in patter_dict.items():
             result = re.findall(v, string)
@@ -85,23 +85,23 @@ class SimpleConnector(SqlGenerator):
     def get_connection(self):
         return self.connector
 
-    def get_cursor(self, cursor_type=None,connection=None):
-        try:
-            conn = self.get_connection() if not connection else connection
-            return self._choose_cursor(cursor_type,conn)
-        except Exception as e:
-            self.logger.warning("ping and reconnect ...")
-            conn.ping(reconnect=True)
-            return self._choose_cursor(cursor_type,conn)
+    # def get_cursor(self, cursor_type=None,connection=None):
+    #     try:
+    #         conn = self.get_connection() if not connection else connection
+    #         return self._choose_cursor(cursor_type,conn)
+    #     except Exception as e:
+    #         self.logger.warning("ping and reconnect ...")
+    #         conn.ping(reconnect=True)
+    #         return self._choose_cursor(cursor_type,conn)
 
-    def _choose_cursor(self, cursor_type, conn):
-        if cursor_type=='dict':
-            return conn.cursor(DictCursor)
-        elif cursor_type == 'ss':
-            return conn.cursor(SSCursor)
-        elif cursor_type == 'ssdict':
-            return conn.cursor(SSDictCursor)
-        return conn.cursor()
+    # def _choose_cursor(self, cursor_type, conn):
+    #     if cursor_type=='dict':
+    #         return conn.cursor(DictCursor)
+    #     elif cursor_type == 'ss':
+    #         return conn.cursor(SSCursor)
+    #     elif cursor_type == 'ssdict':
+    #         return conn.cursor(SSDictCursor)
+    #     return conn.cursor()
 
     def read_ss_result(self, sql, param=None, cursor_type='ss'):
         conn = self.get_connection()
@@ -240,13 +240,11 @@ class MysqlConnection(MysqlSqler, SimpleConnector):
         
 
 
-class SimplePoolConnector(SimpleConnector):
+class SimplePoolConnector(object):
 
     _creator=None
 
-    def __init__(self, *args, **kwargs):
-
-
+    def _init_connargs(self,*args,**kwargs):
         args_dict=self._set_conn_var(**kwargs)
         #默认参数
         connargs = {"host": self.host, "user": self.user, "password": self.password, "database": self.database, 'port': self.port, "charset": self.charset,
@@ -259,8 +257,11 @@ class SimplePoolConnector(SimpleConnector):
         # maxusage : 单个连接的最大允许复用次数(0或False代表不限制的复用).当达到最大数时,连接会自动重新连接(关闭和重新打开)
         # setsession : 用于传递到数据库的准备会话，如 [”set name UTF-8″]
         connargs.update(args_dict)
+        return  connargs
 
-        self.connection_pool = PooledDB(**connargs)
+    def __init__(self, *args, **kwargs):
+        self.connargs=self._init_connargs(*args,**kwargs)
+        self.connection_pool = PooledDB(**self.connargs)
 
 
     def get_connection(self):
@@ -275,8 +276,4 @@ class MysqlPool(SimplePoolConnector, MysqlConnection):
 
 
 
-class PostgrePool(SimplePoolConnector):
-    port = 5432
-    import psycopg2 as pg2
-    _creator=pg2
 

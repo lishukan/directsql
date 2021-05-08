@@ -13,7 +13,7 @@ class SqlGenerator(object):
         """返回对应表的所有字段，形式为列表"""
 
         table_name = table_name if not dbname else dbname+"."+table_name
-        sql = "select COLUMN_NAME from information_schema.COLUMNS where TABLE_NAME=%s order by COLUMN_NAME;"
+        sql = "SELECT COLUMN_NAME from information_schema.COLUMNS where TABLE_NAME=%s order by COLUMN_NAME;"
         return sql, (table_name,)
 
     @staticmethod
@@ -48,7 +48,7 @@ class SqlGenerator(object):
         else:
             raise TypeError('error ! colnmns_you_need must be str or tuple or list ')
 
-        sql = "select {} from `{}` ".format(columns, table)
+        sql = "SELECT {} from `{}` ".format(columns, table)
         params = None
         if where:
             if isinstance(where, dict):
@@ -181,7 +181,7 @@ class MysqlSqler(SqlGenerator):
         if not need_merge_columns:
             need_merge_columns = columns
         update_str = ','.join(['`{}`=values(`{}`)'.format(col,col) for col in need_merge_columns])
-        sql = "insert into `{}` ({}) values({})  on duplicate key update {};"
+        sql = "INSERT INTO `{}` ({}) values({})  on duplicate key update {};"
         return sql.format(table, '`'+'`,`'.join(columns)+'`', format_tags, update_str), data
 
 

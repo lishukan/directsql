@@ -1,8 +1,8 @@
 import sys,os.path
 abspath = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(os.path.abspath(".."))
-from sqlgenerator import *
-from connector import MysqlPool,MysqlConnection
+from directsql.sqlgenerator import *
+from directsql.connector import MysqlPool,MysqlConnection
 import  time
 
 
@@ -17,8 +17,7 @@ def func(*args, **kwargs):
 
 
 if __name__ == "__main__":
-    connargs = {"host": '81.71.26.183', "user": 'root', "password": 'HandsomeBoyMysql', "database": 'surecan', 
-                     "mincached": 30, "maxcached": 80, "maxshared": 50, "maxconnections": 10, "blocking": True, "maxusage": 0}
+    connargs =""" """
         
     conn = MysqlPool(**connargs)
     #result,count=conn.execute_sql("select  * from  test_table where age=%s ",param=(25,))
@@ -26,7 +25,7 @@ if __name__ == "__main__":
     # print(count)
     #result,count=conn.execute_sql("select  * from  test_table where age=%s ",param=(25,))
     #result, count = conn.execute_sql("select  * from  test_table where age=%(age)s ", param={'age': 25})
-    time.sleep(10)
+    #time.sleep(10)
     result, count = conn.select('*', 'test_table')
     #print(result, count)
     #conn.select("age,name", 'test_table', where={'age': 25, 'id': 2})
