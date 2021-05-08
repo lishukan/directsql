@@ -41,13 +41,8 @@ class SqlGenerator(object):
         where 为字典 或字符串
 
         """
-        if isinstance(columns, (tuple, list)):
-            columns = ','.join(columns)
-        elif isinstance(columns, str):
-            columns = columns
-        else:
-            raise TypeError('error ! colnmns_you_need must be str or tuple or list ')
-
+        columns = columns if isinstance(columns, str) else ','.join(columns)
+        
         sql = "SELECT {} from `{}` ".format(columns, table)
         params = None
         if where:
@@ -64,7 +59,7 @@ class SqlGenerator(object):
         return sql, params
 
     @classmethod
-    def _get_after_format_sql(cls, init_sql, table, data, columns=None):
+    def _get_after_format_sql(cls, init_sql, table, data, columns: tuple or list = None):
         if isinstance(data, dict):
             if not columns:
                 columns = data.keys()
@@ -77,7 +72,7 @@ class SqlGenerator(object):
         return final_sql, data
 
     @classmethod
-    def generate_insert_sql(cls, table, data: dict or list, columns=None, ignore=False, on_duplicate_key_update: str = None):
+    def generate_insert_sql(cls, table, data: dict or list, columns: tuple or list = None, ignore=False, on_duplicate_key_update: str = None):
         """
         columns 为 可迭代对象 list/tuple/set/...
         插入单条数据,condition为字典形式的数据
@@ -89,7 +84,7 @@ class SqlGenerator(object):
         return cls._get_after_format_sql(sql, table, data, columns)
 
     @classmethod
-    def generate_replace_into_sql(cls, table, data: dict or list, columns=None):
+    def generate_replace_into_sql(cls, table, data: dict or list, columns: tuple or list = None):
         """
         columns  字段顺序。如果不传入，则取第一个data的 键集合
         """
@@ -97,7 +92,7 @@ class SqlGenerator(object):
         return cls._get_after_format_sql(sql, table, data, columns)
 
     @classmethod
-    def generate_update_sql_by_primary(cls, table, data: dict, pri_value, columns=None, primary: str = 'id'):
+    def generate_update_sql_by_primary(cls, table, data: dict, pri_value, columns: tuple or list = None, primary: str = 'id'):
         """
         更新单条数据,condition为字典形式的数据
         columns 为 可迭代对象 list/tuple/set/...
@@ -114,7 +109,7 @@ class SqlGenerator(object):
         return sql, param
 
     @classmethod
-    def generate_update_sql(cls, table, data: dict, condition, columns: None or list = None, limit=None):
+    def generate_update_sql(cls, table, data: dict, condition, columns: tuple or list = None, limit=None):
         """
         columns 为需要更新的字段
         data= {'name':'jack', 'age':18,'school':'MIT'  }
@@ -168,7 +163,7 @@ class SqlGenerator(object):
 
 class MysqlSqler(SqlGenerator):
 
-    def generate_merge_sql(self, table, data, columns=None, need_merge_columns: list = None):
+    def generate_merge_sql(self, table, data, columns:tuple or list =None, need_merge_columns: tuple or list = None):
         """
         columns 为需要插入的字段
         need_merge_columns 为 出现重复时需要更新的字段.如果不给值，将会把所有 columns 里的字段都更新

@@ -1,6 +1,5 @@
 from .connector import SimplePoolConnector, PooledDB
-# pip3 install psycopg2   or  pip3 install psycopg2-binary
-import psycopg2 as pg2
+import psycopg2 as pg2 # pip3 install psycopg2   or  pip3 install psycopg2-binary
 import traceback
 from .sqlgenerator import SqlGenerator
 from .connector import   SimpleConnector
@@ -10,7 +9,48 @@ class PgSqlGenerator(SqlGenerator):
     """
     pgsql sql语句 拼接类
     """
-    pass
+    @classmethod
+    def generate_merge_sql(cls, table, data: dict or list, conflict: list or tuple, columns: tuple or list = None, need_merge_columns: list = None):
+        """
+       
+        """
+        if not columns:
+            columns = data.keys()  if isinstance(data, dict) else data[0].keys()
+
+        format_tags = ','.join(('%({})s'.format(col) for col in columns))
+        if not need_merge_columns:
+            need_merge_columns = columns
+        update_str = ','.join([" \"{}\"=%({})s ".format(col, col) for col in need_merge_columns])
+        
+        sql = "INSERT INTO `{}` ({}) values({})  on conflict (`{}`) DO UPDATE SET {};".format(table,'`' + '`,`'.join(columns) + '`',format_tags,'`,`'.join(conflict),update_str)
+        return sql, data
+    
+    @classmethod
+    def generate_insert_sql(cls, table, data: dict or list, columns: tuple or list = None, conflict: list or tuple=None,do_nothing=False, on_conflict_do_update: str = None):
+        """
+        columns 为 可迭代对象 list/tuple/set/...
+        插入单条数据,condition为字典形式的数据
+        data 必须为字典 或者 为一个元素类型为字典的列表
+        """
+        if isinstance(data, dict):
+            if not columns:
+                columns = data.keys()
+        else:
+            if not columns:
+                columns = data[0].keys()
+
+        format_tags = ','.join(('%({})s'.format(col) for col in columns))
+
+        if not conflict:
+            sql = 'INSERT INTO `{}` (`{}`) VALUES ({})'.format(table,'`,`'.join(columns), format_tags )
+        else:
+            if  do_nothing:
+                sql = 'INSERT  INTO `{}` (`{}`) VALUES ({}) on conflict(`{}`) DO NOTHING'.format(table,'`,`'.join(columns), format_tags, '`,`'.join(conflict))
+            else:
+                assert on_conflict_do_update
+                sql = 'INSERT  INTO `{}` (`{}`) VALUES ({}) on conflict(`{}`) DO UPDATE SET '.format(table,'`,`'.join(columns), format_tags, '`,`'.join(conflict)) + on_conflict_do_update
+                
+        return sql,data
 
 
 class PgConnection(PgSqlGenerator, SimpleConnector):
@@ -21,12 +61,40 @@ class PgConnection(PgSqlGenerator, SimpleConnector):
     def __init__(self, **kwargs):
         self.connector = pg2.connect(**kwargs)
 
+    def execute_with_return_id(self, sql, param=None):
+        """
+        此方法会返回插入的最后一行的id
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        result = False
+        try:
+            r = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
+            conn.commit()
+            return cursor.lastrowid
+        except:
+            self.logger.info("---------------------------------")
+            self.logger.error(sql)
+            #self.logger.error(param)
+            self.logger.info("---------------------------------")
+            conn.rollback()
+            traceback.print_exc()
+        finally:
+            return result
+
+    def insert_into(self, table, data: dict or list, columns: tuple or list = None, conflict: list or tuple=None,do_nothing=False, on_conflict_do_update: str = None,return_id=False):
+        """
+        on_conflict_do_update  为字符串  ,这里有个坑，  pgsql 字符串要用 单引号
+        """
+        sql, param = self.generate_insert_sql(table, data, columns, conflict,do_nothing, on_conflict_do_update)
+        return self.execute_with_return_id(sql, param) if return_id else self.execute_sql(sql, param)[1]
+
     def read_ss_result(self, sql, param=None, cursor_type='ss'):
         raise AttributeError("This function is not finish develop")
         #return super().read_ss_result(sql.replace('`','"'),param,cursor_type)
-    
+
     def execute_sql(self, sql, param=None, cursor_type=None):
-        sql=sql.replace('`','"')
+        sql=sql.replace('`','"')  #上面的语句都是按照mysql 的转义字符来的，pg里统一换成 双引号
         conn = self.get_connection()
         cursor = conn.cursor(cursor_factory=DictCursor) if cursor_type == 'dict' else conn.cursor()  #此处由于需要返回查询结果集，所以不支持流式游标
         
@@ -52,6 +120,13 @@ class PgConnection(PgSqlGenerator, SimpleConnector):
 
    
 
+
+    def merge_into(self, table, data: dict or list, conflict: list or tuple, columns: tuple or list = None, need_merge_columns: list = None):
+        """
+        conflict 必须指定 字段
+        """
+        sql, param = self.generate_merge_sql( table, data, conflict,columns, need_merge_columns)
+        return self.execute_sql(sql, param)[1]
 
 class PostgrePool(SimplePoolConnector,PgConnection):
     port = 5432

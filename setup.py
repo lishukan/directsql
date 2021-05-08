@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
   
 setup(  
     name = 'directsql',  
-    version = '0.2.1',
+    version = '0.2.2',
     # keywords = ('chinesename',),  
     description = 'pgsql 移动到新文件',  
     license = 'MIT License',  
