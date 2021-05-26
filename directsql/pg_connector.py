@@ -56,10 +56,19 @@ class PgSqlGenerator(SqlGenerator):
 class PgConnection(PgSqlGenerator, SimpleConnector):
     """
     pg 单个连接类
+    cursor_type 由初始化时设定
     """
     
     def __init__(self, **kwargs):
         self.connector = pg2.connect(**kwargs)
+
+    def select(self, columns='id', table=None, where=None, group_by: str = None, order_by: str = None, limit: int = None, offset=None):
+        """
+        仅支持 简单的查询
+        """
+        sql, param = self.generate_select_sql(columns, table, where, group_by, order_by, limit, offset)
+        return self.execute_sql(sql, param)
+
 
     def execute_with_return_id(self, sql, param=None):
         """
@@ -95,6 +104,9 @@ class PgConnection(PgSqlGenerator, SimpleConnector):
         #return super().read_ss_result(sql.replace('`','"'),param,cursor_type)
 
     def execute_sql(self, sql, param=None, cursor_type=None):
+        """
+        执行单条语句
+        """
         sql=sql.replace('`','"')  #上面的语句都是按照mysql 的转义字符来的，pg里统一换成 双引号
         conn = self.get_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor) if cursor_type == 'dict' else conn.cursor()  #此处由于需要返回查询结果集，所以不支持流式游标
@@ -120,6 +132,29 @@ class PgConnection(PgSqlGenerator, SimpleConnector):
             return result, count
 
    
+
+    def do_transaction(self, sql_params: list, cursor_type=None):
+        """
+        执行事务
+        sql_params 内的元素类型为 tuple  对应 ---> （sql,params）  ， 其中 如果params 类型为list，则会使用启用游标的executemany 去执行
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor()
+        result = count = False
+        try:
+            for sql, param in sql_params:
+                count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
+
+            if sql.startswith('SELECT'):
+                result = cursor.fetchall()  # 此方法应直接返回 所有结果，不应去考虑fetchone还是fetchmany的问题。这是传入的sql中就应该限定的
+            else:
+                result=()
+            conn.commit()
+        except:
+            conn.rollback()
+            traceback.print_exc()
+        finally:
+            return result, count
 
 
     def merge_into(self, table, data: dict or list, conflict: list or tuple, columns: tuple or list = None, need_merge_columns: list = None):

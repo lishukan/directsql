@@ -47,9 +47,16 @@ class SimpleConnector(SqlGenerator):
         self.host = connargs['host']
         self.user = connargs['user']
         self.port = int(connargs['port'])
-        self.password = connargs['password']
+        if connargs.get('password', None):
+            self.password = connargs['password']
+        else:
+            self.password = connargs['passwd']
         self.charset = connargs.get('charset', 'utf8')
-        self.database = connargs['database']
+        if connargs.get('database', None):
+            self.database = connargs['database']
+        else:
+            self.database = connargs['db']
+
         return connargs
 
     def __init__(self, **kwargs):

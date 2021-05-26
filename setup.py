@@ -2,9 +2,9 @@ from setuptools import setup, find_packages
   
 setup(  
     name = 'directsql',  
-    version = '0.2.3',
+    version = '0.2.4',
     # keywords = ('chinesename',),  
-    description = 'pgsql 移动到新文件',  
+    description="""一个简单的使用python操作mysql的工具，提供了一些类似sql语法的方法，最终拼接成sql。可以很好地处理一些常见场景，不依赖orm 的同时避免手写大量sql。""",  
     license = 'MIT License',  
     packages = ['directsql'],  # 要打包的项目文件夹
     include_package_data=True,   # 自动打包文件夹内所有数据
