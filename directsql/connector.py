@@ -39,23 +39,18 @@ class SimpleConnector(SqlGenerator):
     def _set_conn_var(self, **kwargs):
         if kwargs.get('string_arg', None):
             connargs = self.get_conn_args_from_str(kwargs['string_arg'])
+            del kwargs['string_arg']
         else:
             connargs = {'user': 'root', 'port': 3306, 'charset': 'utf8'}
-            connargs.update(kwargs)
+        connargs.update(kwargs)
 
         connargs['port']=int(connargs['port'])
         self.host = connargs['host']
         self.user = connargs['user']
         self.port = int(connargs['port'])
-        if connargs.get('password', None):
-            self.password = connargs['password']
-        else:
-            self.password = connargs['passwd']
+        self.password = connargs['password']
         self.charset = connargs.get('charset', 'utf8')
-        if connargs.get('database', None):
-            self.database = connargs['database']
-        else:
-            self.database = connargs['db']
+        self.database = connargs['database']
 
         return connargs
 
@@ -143,13 +138,15 @@ class SimpleConnector(SqlGenerator):
             count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)  # 得到受影响的数据条数
             conn.commit()
             result = cursor.fetchall()  # 此方法应直接返回 所有结果，不应去考虑fetchone还是fetchmany的问题。这是传入的sql中就应该限定的
-        except:
-            self.logger.info("---------------------------------")
+        except Exception as e:
+            self.logger.warning("---------------------------------")
+            self.logger.error(str(e))
             self.logger.error(sql)
             #self.logger.error(param)
+            self.logger.error(traceback.format_exc())
             self.logger.info("---------------------------------")
             conn.rollback()
-            traceback.print_exc()
+            #traceback.print_exc()
         finally:
             return result, count
 
@@ -256,6 +253,7 @@ class SimplePoolConnector(object):
         #默认参数
         connargs = {"host": self.host, "user": self.user, "password": self.password, "database": self.database, 'port': self.port, "charset": self.charset,
                     "creator": self._creator, "mincached": 3, "maxcached": 8, "maxshared": 5, "maxconnections": 10, "blocking": True, "maxusage": 0}
+        
         # mincached : 启动时开启的空连接数量(0代表开始时不创建连接)
         # maxcached : 连接池最大可共享连接数量(0代表不闲置连接池大小)
         # maxshared : 共享连接数允许的最大数量(0代表所有连接都是专用的)如果达到了最大数量,被请求为共享的连接将会被共享使用
@@ -268,6 +266,7 @@ class SimplePoolConnector(object):
 
     def __init__(self, *args, **kwargs):
         self.connargs=self._init_connargs(*args,**kwargs)
+        #print(self.connargs)
         self.connection_pool = PooledDB(**self.connargs)
 
 
