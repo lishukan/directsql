@@ -37,9 +37,9 @@ class SimpleConnector(SqlGenerator):
     logger = logger
     charset='utf8'
     def _set_conn_var(self, **kwargs):
-        if kwargs.get('string_arg', None):
-            connargs = self.get_conn_args_from_str(kwargs['string_arg'])
-            del kwargs['string_arg']
+        if kwargs.get('conn_cmd', None):
+            connargs = self.get_conn_args_from_str(kwargs['conn_cmd'])
+            del kwargs['conn_cmd']
         else:
             connargs = {'user': 'root', 'port': 3306, 'charset': 'utf8'}
         connargs.update(kwargs)
@@ -50,7 +50,8 @@ class SimpleConnector(SqlGenerator):
         self.port = int(connargs['port'])
         self.password = connargs['password']
         self.charset = connargs.get('charset', 'utf8')
-        self.database = connargs['database']
+        db = connargs.get('db', None)
+        self.database = db if db else connargs['database']
 
         return connargs
 
@@ -62,9 +63,8 @@ class SimpleConnector(SqlGenerator):
 
     def get_conn_args_from_str(self, string):
         """
-        @param string,connect args on terminal ,for example: mysql -h127.0.0.1 -p1234  -uroot -p123456 -Dtest_base 
-        return a dict with connect args
-        { "host":"127.0.0.1","port":1234,"password":"123456","db":"test_base"  }
+        @string : mysql-client命令  mysql -h127.0.0.1 -p1234  -uroot -p123456 -Dtest_base 
+        返回 参数字典   { "host":"127.0.0.1","port":1234,"password":"123456","db":"test_base"  }
         """
         conn_args = dict()
         patter_dict = {
@@ -216,7 +216,7 @@ class SimpleConnector(SqlGenerator):
         """
         update action  only return affected_rows
         """
-        sql, param = self.generate_update_sql(table, data, where, columns , limit)
+        sql, param = self.generate_update_sql(table, data, where, columns, limit)
         return self.execute_sql(sql, param)[1]
 
     def delete_by_primary(self, table, pri_value, primary='id'):
