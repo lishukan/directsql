@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
+from typing import Iterable
 
 
 class SqlGenerator(object):
@@ -10,7 +11,7 @@ class SqlGenerator(object):
 
     @classmethod
     def get_all_column_sql(cls, table_name, dbname=None):
-        """返回对应表的所有字段，形式为列表"""
+        """返回对应表的所有字段"""
 
         table_name = table_name if not dbname else dbname+"."+table_name
         sql = "SELECT COLUMN_NAME from information_schema.COLUMNS where TABLE_NAME=%s order by COLUMN_NAME;"
@@ -33,7 +34,7 @@ class SqlGenerator(object):
         return columns_condi, tuple(params)
 
     @classmethod
-    def generate_select_sql(cls, columns='id', table=None, where=None, group_by: str = None, order_by: str = None, limit: int = None, offset=None):
+    def generate_select_sql(cls, columns='id', table=None, where=None, group_by: str = None, order_by: str = None, limit: int = None, offset: int = None):
         """
         设要查询两个字段id和name，则 columns_u_need 为（'id','name'） / ['id','name']  /  'id,name'
         要查询所有字段 使用  columns_u_need='*' 即可
@@ -42,7 +43,7 @@ class SqlGenerator(object):
 
         """
         columns = columns if isinstance(columns, str) else ','.join(columns)
-        
+
         sql = "SELECT {} from `{}` ".format(columns, table)
         params = None
         if where:
@@ -60,6 +61,10 @@ class SqlGenerator(object):
 
     @classmethod
     def _get_after_format_sql(cls, init_sql, table, data, columns: tuple or list = None):
+        """
+        生成sql语句里需要插入的字段和对应的格式化符号
+        @columns: 需要格式化的字段。默认去第一个传入的字典数据的键值对
+        """
         if isinstance(data, dict):
             if not columns:
                 columns = data.keys()
@@ -109,25 +114,26 @@ class SqlGenerator(object):
         return sql, param
 
     @classmethod
-    def generate_update_sql(cls, table, data: dict, condition, columns: tuple or list = None, limit=None):
+    def generate_update_sql(cls, table, data: dict, condition: str or dict or Iterable, columns: tuple or list = None, limit=None):
         """
-        columns 为需要更新的字段
-        data= {'name':'jack', 'age':18,'school':'MIT'  }
-        condition 为dict时，会根据这个dict 转换为对应的where条件
-        如果为其他类型，会将condition中的 key 在data上对应的值 取出，作为键值对并转换为where条件
-        condition --> dict : {'age':24}                     --->  update xx set name='jack',age=18,school='MIT' where age=24
-                  --> tuple or list or set :  ('age',) / ['age']/{'age'}    --->  update xx set name='jack',school='MIT' where age=18
-                --> str :  age=88   update xx set name='jack',age=18,school='MIT' where age=88
+        @data:新数据    例如  data= {'name':'jack', 'age':18,'school':'MIT'  }  --> update xx set name='jack',age=18,school='MIT' 
+        @condition：   为dict时，会根据这个dict 转换为对应的where条件。 如传入 {'age':24}     --->  update xx set name='jack',age=18,school='MIT' where age=24
+                     --> tuple or list ... : 把参数里的键值对从data 中取出 组成where条件          ('age',) / ['age']      --->  update xx set name='jack',school='MIT' where age=18 
+                     --> str :  age=88   update xx set name='jack',age=18,school='MIT' where age=88
+        更新必须传入条件，避免漏传条件导致全表被更新
         """
         sql = 'UPDATE `{}` SET {} WHERE {}'
-        all_columns = data.keys()
-
+        if not columns:  # 需要更新的字段
+            columns = data.keys()
+        set_tags = ','.join(('`{}`=%s'.format(col, col) for col in columns))
+        param = tuple(data[k] for k in columns)
         if isinstance(condition, str):
             condition_keys = set()
             where_tags = condition
+            condition_param = ()
         else:
             if isinstance(condition, dict):
-                condition_keys = condition.keys()
+                condition_keys = set(condition.keys())
                 condition_param = tuple(condition[k] for k in condition_keys)
             else:
                 condition_keys = set(condition)
@@ -135,21 +141,15 @@ class SqlGenerator(object):
 
             where_tags = ' AND '.join(('`{}`=%s'.format(col) for col in condition_keys))
 
-        if not columns:  # 需要更新的字段
-            columns = all_columns - condition_keys
-        else:
-            columns = set(columns)
-
-        set_tags = ','.join(('`{}`=%s'.format(col, col) for col in columns))
-        param = tuple(data[k] for k in columns)
         param += condition_param
         if limit:
             param += (limit,)
+
         final_sql = sql.format(table, set_tags, where_tags)
         return final_sql, param
 
     @classmethod
-    def generate_delete_sql(cls, table, where: str or dict, limit: int = 0):
+    def generate_delete_sql(cls, table, where: str or dict, limit: int = None):
         sql = "DELETE FROM `{}` WHERE {} "
         if isinstance(where, dict):
             where_str, params = cls.get_columns_and_params(where, equal=True, and_join=True)
@@ -163,20 +163,18 @@ class SqlGenerator(object):
 
 class MysqlSqler(SqlGenerator):
 
-    def generate_merge_sql(self, table, data, columns:tuple or list =None, need_merge_columns: tuple or list = None):
+    def generate_merge_sql(self, table, data, columns: tuple or list = None,  merge_columns: tuple or list = None):
         """
         columns 为需要插入的字段
-        need_merge_columns 为 出现重复时需要更新的字段.如果不给值，将会把所有 columns 里的字段都更新
+        merge_columns 为 出现重复时需要更新的字段.如果不给值，将会把所有 columns 里的字段都更新
         如果columns 都没有值，将会读取所有data的 键值对
         """
         if not columns:
-            columns = data.keys()  if isinstance(data, dict) else data[0].keys()
+            columns = data.keys() if isinstance(data, dict) else data[0].keys()
 
         format_tags = ','.join(('%({})s'.format(col) for col in columns))
-        if not need_merge_columns:
-            need_merge_columns = columns
-        update_str = ','.join(['`{}`=values(`{}`)'.format(col,col) for col in need_merge_columns])
+        if not merge_columns:
+            merge_columns = columns
+        update_str = ','.join(['`{}`=values(`{}`)'.format(col, col) for col in merge_columns])
         sql = "INSERT INTO `{}` ({}) values({})  on duplicate key update {};"
         return sql.format(table, '`'+'`,`'.join(columns)+'`', format_tags, update_str), data
-
-
