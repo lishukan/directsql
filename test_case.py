@@ -27,9 +27,9 @@ connargs = {
 conn = MysqlConnection(**connargs)  # 使用字典参数实例化连接
 # pool = MysqlPool(**connargs)  # 使用字典参数实例化池
 # pool = MysqlPool(**connargs, mincached=1)  # 使用字典参数实例化池
-# string_args = "mysql -h49.235.84.230 -uroot -pHandsomeBoyMysql -Dtest -P3306"
-# conn = MysqlConnection(conn_cmd="mysql -h49.235.84.230 -uroot -pHandsomeBoyMysql -Dtest -P3306")  # 使用连接命令实例化连接
-# pool = MysqlPool(conn_cmd="mysql -h49.235.84.230 -uroot -pHandsomeBoyMysql -Dtest -P3306")  # 使用连接命令实例化连接池
+# string_args = "mysql -hxxxx -uroot -pHandsomeBoyMysql -Dtest -P3306"
+# conn = MysqlConnection(conn_cmd="mysql -hxxxx -uroot -pHandsomeBoyMysql -Dtest -P3306")  # 使用连接命令实例化连接
+# pool = MysqlPool(conn_cmd="mysql -hxxxx -uroot -pHandsomeBoyMysql -Dtest -P3306")  # 使用连接命令实例化连接池
 
 #=============================================================================================================
 """
