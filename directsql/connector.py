@@ -376,7 +376,6 @@ class SimplePoolConnector(object):
 
     def __init__(self, *args, **kwargs):
         self.connargs = self._init_connargs(*args, **kwargs)
-        # print(self.connargs)
         self.connection_pool = PooledDB(**self.connargs)
 
     def _get_connection(self):
@@ -387,3 +386,8 @@ class MysqlPool(SimplePoolConnector, MysqlConnection):
 
     port = 3306
     _creator = pymysql
+
+    def __init__(self, *args, **kwargs):
+        connargs = self._init_connargs(**kwargs)
+        self.connargs = self._choose_cursor_class(connargs)
+        self.connection_pool = PooledDB(**self.connargs)
