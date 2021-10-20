@@ -36,7 +36,7 @@ class SimpleConnector(SqlGenerator):
 
     logger = logger
     charset = 'utf8'
-    cursor_type = None
+    cursor_class = DefaultCursor
     _primary_key_cache = dict()  # 用来缓存表的主键
 
     def _set_conn_var(self, **kwargs):
@@ -62,18 +62,22 @@ class SimpleConnector(SqlGenerator):
         选择实例化连接时 选择的游标类型。 也可以在执行语句时自行选择。
         """
         cursor_class = DefaultCursor
-        if 'cursor_type' in connargs.keys() and 'cursorclass' not in connargs.keys():
-            cursor_type = connargs.get('cursor_type', None)
-            del connargs['cursor_type']
-            assert isinstance(cursor_type, str), "cursor_type must in (ss,dcit,ssdict)  "
-            cursor_type = cursor_type.lower()
-            if cursor_type == 'ss':
-                cursor_class = SSCursor
-            elif cursor_type == 'dict':
-                cursor_class = SSCursor
-            elif cursor_type == 'ssdict':
-                cursor_class = SSCursor
-            connargs['cursorclass'] = cursor_class
+        if 'cursorclass' in connargs.keys():
+            cursor_class = connargs['cursorclass']
+        else:
+            if 'cursor_type' in connargs.keys():
+                cursor_type = connargs.get('cursor_type', None)
+                del connargs['cursor_type']
+                assert isinstance(cursor_type, str), "cursor_type must in (ss,dcit,ssdict)  "
+                cursor_type = cursor_type.lower()
+                if cursor_type == 'ss':
+                    cursor_class = SSCursor
+                elif cursor_type == 'dict':
+                    cursor_class = DictCursor
+                elif cursor_type == 'ssdict':
+                    cursor_class = SSDictCursor
+        connargs['cursorclass'] = cursor_class
+        self.cursor_class = cursor_class
         return connargs
 
     def __init__(self, **kwargs):
@@ -109,7 +113,7 @@ class SimpleConnector(SqlGenerator):
 
     def _get_cursor(self, connnetion, cursor_type=None):
         if not cursor_type:
-            cursor_type = self.cursor_type
+            return connnetion.cursor(self.cursor_class)
         if cursor_type == 'dict':
             return connnetion.cursor(DictCursor)
         elif cursor_type == 'ss':
@@ -354,7 +358,8 @@ class MysqlConnection(MysqlSqler, SimpleConnector):
         setattr(self, '_tables', tuple(d[0] for d in all_tables))
         return self._tables
 
-class SimplePoolConnector(object):
+
+class SimplePoolConnector(MysqlConnection):
 
     _creator = None
 
