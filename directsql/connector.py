@@ -8,12 +8,10 @@ try:
     from dbutils.pooled_db import PooledDB
 except:
     from DBUtils.PooledDB import PooledDB
-
-import time
+from typing import Iterable, List, Tuple, Union
 from .sqlgenerator import SqlGenerator, MysqlSqler
 from pymysql.constants import CLIENT
 import logging
-
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
 handler = logging.StreamHandler()
@@ -23,16 +21,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-class SqlHandler(object):
-
-    def _get_connection(self):
-        raise NotImplementedError("_get_connection function should be called on child object ")
-
-    # def get_cursor(self,connection=None):
-    #     raise NotImplementedError("get_cursor function should be called on child object ")
-
-
-class SimpleConnector(SqlGenerator):
+class _SimpleConnector(SqlGenerator):
 
     logger = logger
     charset = 'utf8'
@@ -57,7 +46,7 @@ class SimpleConnector(SqlGenerator):
         self.database = db if db else connargs['database']
         return connargs
 
-    def _choose_cursor_class(self, connargs):
+    def _choose_cursor_class(self, connargs: dict):
         """
         选择实例化连接时 选择的游标类型。 也可以在执行语句时自行选择。
         """
@@ -142,7 +131,7 @@ class SimpleConnector(SqlGenerator):
             traceback.print_exc()
             return False
 
-    def execute_sql(self, sql, param=None, cursor_type=None):
+    def execute_sql(self, sql: str, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type=None):
         """
         核心方法,执行sql
         # cursor_type为游标类型（默认返回值为元祖类型），可选字典游标，将返回数据的字典形式
@@ -168,7 +157,7 @@ class SimpleConnector(SqlGenerator):
         finally:
             return result, count
 
-    def execute_with_return_id(self, sql, param=None):
+    def execute_with_return_id(self, sql: str, param: Union[tuple, dict, List[tuple], List[dict]] = None):
         """
         此方法会返回插入的最后一行的id
         """
@@ -190,7 +179,7 @@ class SimpleConnector(SqlGenerator):
         finally:
             return result
 
-    def do_transaction(self, sql_params: list, cursor_type=None):
+    def do_transaction(self, sql_params: List[Tuple[str, tuple]], cursor_type=None):
         """
         执行事务：传入sql和params 列表     ,如下
         [  
@@ -221,7 +210,7 @@ class SimpleConnector(SqlGenerator):
         sql, param = self.generate_select_sql(columns, table, where, group_by, order_by, limit, offset)
         return self.execute_sql(sql, param, **kwargs)
 
-    def insert_into(self, table: str, data: dict or list, columns: tuple or list = None, ignore=False, on_duplicate_key_update: str = None, return_id=False):
+    def insert_into(self, table: str,   data: dict or List[dict], columns: tuple or list = None, ignore=False, on_duplicate_key_update: str = None, return_id=False):
         """
         @data: 字典或字典列表（批量插入）  
         @columns: 哪些字段需要被插入。默认是传入的data的所有键。当data中有多余字段时，可以通过columns指定哪些字段需要作为新数据的字段插入
@@ -254,7 +243,7 @@ class SimpleConnector(SqlGenerator):
         sql, param = self.generate_update_sql_by_primary(table, data, pri_value, columns, primary)
         return self.execute_sql(sql, param)[1]
 
-    def update(self, table: str, data: dict, where, columns: tuple or list = None, limit=None):
+    def update(self, table: str, data: dict, where: str or dict or Iterable, columns: tuple or list = None, limit=None):
         """
         @data:  要被更新的数据，传入字典将会转化为  update xxx set  key=value,key2=value2 的 形式
         @columns: 限定被影响的字段。默认为空，即不限定。则传入的data字典的所有键值对都会被映射为字段和值。
@@ -335,11 +324,11 @@ class SimpleConnector(SqlGenerator):
             return False
 
 
-class MysqlConnection(MysqlSqler, SimpleConnector):
+class MysqlConnection(MysqlSqler, _SimpleConnector):
 
-    charset ="utf8mb4"
+    charset = "utf8mb4"
 
-    def merge_into(self, table: str, data: dict or list, columns=None, merge_columns: tuple or list = None):
+    def merge_into(self, table: str, data: dict or List[dict], columns=None, merge_columns: tuple or list = None):
         """
         合并数据。mysql 不支持原生的merge into。这里通过 insert into ... on duplicate key update ...来实现
         @data:需要被合并的数据
@@ -359,11 +348,10 @@ class MysqlConnection(MysqlSqler, SimpleConnector):
         return self._tables
 
 
-class SimplePoolConnector(MysqlConnection):
-
+class _SimplePoolConnector(MysqlConnection):
     _creator = None
 
-    def _init_connargs(self, *args, **kwargs):
+    def _init_connargs(self, **kwargs):
         args_dict = self._set_conn_var(**kwargs)
         # 默认参数
         connargs = {"host": self.host, "user": self.user, "password": self.password, "database": self.database, 'port': self.port, "charset": self.charset,
@@ -387,12 +375,12 @@ class SimplePoolConnector(MysqlConnection):
         return self.connection_pool.connection()
 
 
-class MysqlPool(SimplePoolConnector, MysqlConnection):
+class MysqlPool(_SimplePoolConnector, MysqlConnection):
 
     port = 3306
     _creator = pymysql
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         connargs = self._init_connargs(**kwargs)
         self.connargs = self._choose_cursor_class(connargs)
         self.connection_pool = PooledDB(**self.connargs)
