@@ -111,7 +111,7 @@ class _SimpleConnector(SqlGenerator):
             return connnetion.cursor(SSDictCursor)
         return connnetion.cursor(DefaultCursor)  # default
 
-    def read_ss_result(self, sql, param=None, cursor_type='ss'):
+    def read_ss_result(self, sql, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type: str = 'ss'):
         """
         读取流式游标的结果
         """
@@ -131,7 +131,7 @@ class _SimpleConnector(SqlGenerator):
             traceback.print_exc()
             return False
 
-    def execute_sql(self, sql: str, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type=None):
+    def execute_sql(self, sql: str, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type: str = None):
         """
         核心方法,执行sql
         # cursor_type为游标类型（默认返回值为元祖类型），可选字典游标，将返回数据的字典形式
@@ -179,7 +179,7 @@ class _SimpleConnector(SqlGenerator):
         finally:
             return result
 
-    def do_transaction(self, sql_params: List[Tuple[str, tuple]], cursor_type=None):
+    def do_transaction(self, sql_params: List[Tuple[str, tuple]], cursor_type: str = None):
         """
         执行事务：传入sql和params 列表     ,如下
         [  
@@ -203,14 +203,15 @@ class _SimpleConnector(SqlGenerator):
         finally:
             return result, count
 
-    def select(self, columns='id', table: str = None, where: str or dict = None, group_by: str = None, order_by: str = None, limit: int = None, offset: int = None, **kwargs):
+    def select(self, columns: Union[Tuple[str], List[str], str] = 'id', table: str = None, where: str or dict = None,
+               group_by: str = None, order_by: str = None, limit: int = None, offset: int = None, **kwargs):
         """
         仅支持 简单的查询
         """
         sql, param = self.generate_select_sql(columns, table, where, group_by, order_by, limit, offset)
         return self.execute_sql(sql, param, **kwargs)
 
-    def insert_into(self, table: str,   data: dict or List[dict], columns: tuple or list = None, ignore=False, on_duplicate_key_update: str = None, return_id=False):
+    def insert_into(self, table: str,  data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None, ignore=False, on_duplicate_key_update: str = None, return_id=False):
         """
         @data: 字典或字典列表（批量插入）  
         @columns: 哪些字段需要被插入。默认是传入的data的所有键。当data中有多余字段时，可以通过columns指定哪些字段需要作为新数据的字段插入
@@ -221,7 +222,7 @@ class _SimpleConnector(SqlGenerator):
         sql, param = self.generate_insert_sql(table, data, columns, ignore, on_duplicate_key_update)
         return self.execute_with_return_id(sql, param) if return_id else self.execute_sql(sql, param)[1]
 
-    def replace_into(self, table: str, data: dict or list, columns: tuple or list = None):
+    def replace_into(self, table: str, data: dict or list, columns: Union[Tuple[str], List[str], str] = None):
         """
         将传入的字典或字典列表 replcae into 
         返回受影响的行数
@@ -243,7 +244,7 @@ class _SimpleConnector(SqlGenerator):
         sql, param = self.generate_update_sql_by_primary(table, data, pri_value, columns, primary)
         return self.execute_sql(sql, param)[1]
 
-    def update(self, table: str, data: dict, where: str or dict or Iterable, columns: tuple or list = None, limit=None):
+    def update(self, table: str, data: dict, where: str or dict or Iterable, columns: Union[Tuple[str], List[str], str] = None, limit: int = None):
         """
         @data:  要被更新的数据，传入字典将会转化为  update xxx set  key=value,key2=value2 的 形式
         @columns: 限定被影响的字段。默认为空，即不限定。则传入的data字典的所有键值对都会被映射为字段和值。
@@ -292,7 +293,7 @@ class _SimpleConnector(SqlGenerator):
         sql, param = self.generate_delete_sql(table, where, limit)
         return self.execute_sql(sql, param)[1]
 
-    def get_multiqueries(self, sql: str or list, params=None, cursor_type='default'):
+    def get_multiqueries(self, sql: str or list, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type='default'):
         """
         同时执行多个sql ，一次性返回所有结果集.但是需要在初始化连接时，引入CLIENT.MULTI_STATEMENTS 作为连接参数实例化连接
             from pymysql.constants import CLIENT
@@ -310,7 +311,7 @@ class _SimpleConnector(SqlGenerator):
         assert cursor_type.lower() in ('default', 'dict'), "仅支持默认游标(default)和字典游标(dict)"
         cursor = self._get_cursor(conn, cursor_type=cursor_type)  # 此处由于需要返回查询结果集，所以不支持流式游标
         try:
-            cursor.execute(sql, params)
+            cursor.execute(sql, param)
             results = []
             results.append(cursor.fetchall())
             while cursor.nextset():
@@ -328,7 +329,7 @@ class MysqlConnection(MysqlSqler, _SimpleConnector):
 
     charset = "utf8mb4"
 
-    def merge_into(self, table: str, data: dict or List[dict], columns=None, merge_columns: tuple or list = None):
+    def merge_into(self, table: str, data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None, merge_columns: Union[Tuple[str], List[str], str] = None):
         """
         合并数据。mysql 不支持原生的merge into。这里通过 insert into ... on duplicate key update ...来实现
         @data:需要被合并的数据

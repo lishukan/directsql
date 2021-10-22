@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Union
 
 
 class SqlGenerator(object):
@@ -34,14 +34,15 @@ class SqlGenerator(object):
         return columns_condi, tuple(params)
 
     @classmethod
-    def generate_select_sql(cls, columns='id', table: str = None, where=str or dict, group_by: str = None, order_by: str = None, limit: int = None, offset: int = None):
+    def generate_select_sql(cls, columns: Union[Tuple[str], List[str], str] = 'id', table: str = None, where=str or dict, group_by: str = None,
+                            order_by: str = None, limit: int = None, offset: int = None):
         """
-        设要查询两个字段id和name，则 columns_u_need 为（'id','name'） / ['id','name']  /  'id,name'
-        要查询所有字段 使用  columns_u_need='*' 即可
+        设要查询两个字段id和name，则 columns 为（'id','name'） / ['id','name']  /  'id,name'
+        要查询所有字段 使用  columns='*' 即可
 
         where 为字典 或字符串
         """
-        assert table,"table不能为空" #table 不能为空。但是参数里为了做到字段在前，table参数只能也设默认值为None
+        assert table, "table不能为空"  # table 不能为空。但是参数里为了做到字段在前，table参数只能也设默认值为None
         columns = columns if isinstance(columns, str) else ','.join(columns)
 
         sql = "SELECT {} from `{}` ".format(columns, table)
@@ -60,16 +61,17 @@ class SqlGenerator(object):
         return sql, params
 
     @classmethod
-    def _get_after_format_sql(cls, init_sql, table, data: dict or List[dict], columns: tuple or list = None):
+    def _get_after_format_sql(cls, init_sql, table, data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None):
         """
         生成sql语句里需要插入的字段和对应的格式化符号
         @columns: 需要格式化的字段。默认去第一个传入的字典数据的键值对
         """
-        if isinstance(data, dict):
-            if not columns:
+        if isinstance(columns, str):
+            columns = (columns,)
+        if not columns:
+            if isinstance(data, dict):
                 columns = data.keys()
-        else:
-            if not columns:
+            else:
                 columns = data[0].keys()
 
         format_tags = ','.join(('%({})s'.format(col) for col in columns))
@@ -77,7 +79,7 @@ class SqlGenerator(object):
         return final_sql, data
 
     @classmethod
-    def generate_insert_sql(cls, table, data: dict or List[dict], columns: tuple or list = None, ignore=False, on_duplicate_key_update: str = None):
+    def generate_insert_sql(cls, table, data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None, ignore=False, on_duplicate_key_update: str = None):
         """
         columns 为 可迭代对象 list/tuple/set/...
         插入单条数据,condition为字典形式的数据
@@ -89,7 +91,7 @@ class SqlGenerator(object):
         return cls._get_after_format_sql(sql, table, data, columns)
 
     @classmethod
-    def generate_replace_into_sql(cls, table, data: dict or List[dict], columns: tuple or list = None):
+    def generate_replace_into_sql(cls, table, data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None):
         """
         columns  字段顺序。如果不传入，则取第一个data的 键集合
         """
@@ -97,14 +99,17 @@ class SqlGenerator(object):
         return cls._get_after_format_sql(sql, table, data, columns)
 
     @classmethod
-    def generate_update_sql_by_primary(cls, table, data: dict or List[dict], pri_value, columns: tuple or list = None, primary: str = 'id'):
+    def generate_update_sql_by_primary(cls, table, data: dict or List[dict], pri_value, columns: Union[Tuple[str], List[str], str] = None, primary: str = 'id'):
         """
         更新单条数据,condition为字典形式的数据
         columns 为 可迭代对象 list/tuple/set/...
         """
         sql = 'UPDATE `{}` SET {} WHERE `{}`=%s'
-        if not columns:
-            columns = data.keys()
+        if isinstance(columns, str):
+            columns = (columns,)
+        else:
+            if not columns:
+                columns = data.keys()
 
         param = tuple(data[k] for k in columns)
         columns_condi = ','.join(['`' + k + '`' + '=%s' for k in columns])
@@ -114,7 +119,7 @@ class SqlGenerator(object):
         return sql, param
 
     @classmethod
-    def generate_update_sql(cls, table, data: dict, condition: str or dict or Iterable, columns: tuple or list = None, limit=None):
+    def generate_update_sql(cls, table, data: dict, condition: str or dict or Iterable, columns: Union[Tuple[str], List[str], str] = None, limit=None):
         """
         @data:新数据    例如  data= {'name':'jack', 'age':18,'school':'MIT'  }  --> update xx set name='jack',age=18,school='MIT' 
         @condition：   为dict时，会根据这个dict 转换为对应的where条件。 如传入 {'age':24}     --->  update xx set name='jack',age=18,school='MIT' where age=24
@@ -123,7 +128,9 @@ class SqlGenerator(object):
         更新必须传入条件，避免漏传条件导致全表被更新
         """
         sql = 'UPDATE `{}` SET {} WHERE {}'
-        if not columns:  # 需要更新的字段
+        if isinstance(columns, str):
+            columns = (columns,)
+        if not columns:
             columns = data.keys()
         set_tags = ','.join(('`{}`=%s'.format(col, col) for col in columns))
         param = tuple(data[k] for k in columns)
@@ -163,16 +170,20 @@ class SqlGenerator(object):
 
 class MysqlSqler(SqlGenerator):
 
-    def generate_merge_sql(self, table, data: dict or List[dict], columns: tuple or list = None,  merge_columns: tuple or list = None):
+    def generate_merge_sql(self, table, data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None,  merge_columns: Union[Tuple[str], List[str], str] = None):
         """
         columns 为需要插入的字段
         merge_columns 为 出现重复时需要更新的字段.如果不给值，将会把所有 columns 里的字段都更新
         如果columns 都没有值，将会读取所有data的 键值对
         """
+        if isinstance(columns, str):
+            columns = (columns,)
         if not columns:
             columns = data.keys() if isinstance(data, dict) else data[0].keys()
 
         format_tags = ','.join(('%({})s'.format(col) for col in columns))
+        if isinstance(merge_columns, str):
+            merge_columns = (merge_columns,)
         if not merge_columns:
             merge_columns = columns
         update_str = ','.join(['`{}`=values(`{}`)'.format(col, col) for col in merge_columns])
