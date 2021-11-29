@@ -21,6 +21,19 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
+class Like(object):
+
+    def __init__(self, string: str) -> None:
+        if '%' in string:
+            string = string.replace('%', '%%%%')
+        else:
+            string = '%%' + string+'%%'
+
+        self.string = string
+
+    def __repr__(self):
+        return self.string
+
 class SqlGenerator(object):
     """
     该类下的方法的返回值必须为两个 
@@ -34,22 +47,6 @@ class SqlGenerator(object):
         table_name = table_name if not dbname else dbname+"."+table_name
         sql = "SELECT COLUMN_NAME from information_schema.COLUMNS where TABLE_NAME=%s order by COLUMN_NAME;"
         return sql, (table_name,)
-
-    @staticmethod
-    def get_columns_and_params(condition: dict, equal=False, and_join=False):
-        """
-        传入字典，返回 字段和参数
-        equal 为True 时 加上 =%s , --->  update  xx set a=%s,b=%s.....
-        and join  用于 where  a=%s AND B=%s 
-
-        """
-        join_str = ',' if not and_join else ' AND '
-        key_s, params = zip(*condition.items())
-        if equal:
-            columns_condi = join_str.join(['`' + k + '`' + '=%s' for k in key_s])
-        else:
-            columns_condi = join_str.join(['`' + k + '`' for k in key_s])
-        return columns_condi, tuple(params)
 
     @classmethod
     def generate_select_sql(cls, columns: Union[Tuple[str], List[str], str] = 'id', table: str = None, where=str or dict, group_by: str = None,
@@ -66,11 +63,9 @@ class SqlGenerator(object):
         sql = "SELECT {} from `{}` ".format(columns, table)
         params = None
         if where:
-            if isinstance(where, dict):
-                where_str, params = cls.get_columns_and_params(where, equal=True, and_join=True)
-            else:
-                where_str = where
-            sql += "where {}".format(where_str)
+            where_tags, where_param = cls.generate_where_sql(where)
+            sql += "where {}".format(where_tags)
+            params = where_param
 
         for key, fs in ((group_by, 'group by'), (order_by, 'order by'), (limit, 'limit'), (offset, 'offset')):
             if key:
@@ -137,11 +132,34 @@ class SqlGenerator(object):
         return sql, param
 
     @classmethod
-    def generate_update_sql(cls, table, data: dict, condition: str or dict or Iterable, columns: Union[Tuple[str], List[str], str] = None, limit=None):
+    def generate_where_sql(cls, condition):
+        assert isinstance(condition, (str, dict)), "构造where条件的参数必须为字符串或 字典"
+        where_tags = []
+        condition_param = []
+        if isinstance(condition, str):
+            where_tags = condition
+        else:
+            for key, value in condition.items():
+                if isinstance(value, tuple) and len(value) == 2:  # 大于小于
+                    where_tags.append('( `{}` >=%s and `{}` <=%s )'.format(key, key))
+                    condition_param.extend([value[0], value[1]])
+                elif isinstance(value, list):
+                    where_tags.append(' `{}` in ({}) '.format(key, ','.join(['%s'] * len(value))))
+                    condition_param.extend(value)
+                elif isinstance(value, Like):
+                    where_tags.append(" `{}` like '{}' ".format(key, value))
+                else:
+                    where_tags.append(' `{}`= %s'.format(key))
+                    condition_param.append(value)
+
+            where_tags = ' AND '.join(where_tags)
+        return where_tags, tuple(condition_param)
+
+    @classmethod
+    def generate_update_sql(cls, table, data: dict, where: str or dict , columns: Union[Tuple[str], List[str], str] = None, limit=None):
         """
         @data:新数据    例如  data= {'name':'jack', 'age':18,'school':'MIT'  }  --> update xx set name='jack',age=18,school='MIT' 
-        @condition：   为dict时，会根据这个dict 转换为对应的where条件。 如传入 {'age':24}     --->  update xx set name='jack',age=18,school='MIT' where age=24
-                     --> tuple or list ... : 把参数里的键值对从data 中取出 组成where条件          ('age',) / ['age']      --->  update xx set name='jack',school='MIT' where age=18 
+        @where   为dict时，会根据这个dict 转换为对应的where条件。 如传入 {'age':24}     --->  update xx set name='jack',age=18,school='MIT' where age=24
                      --> str :  age=88   update xx set name='jack',age=18,school='MIT' where age=88
         更新必须传入条件，避免漏传条件导致全表被更新
         """
@@ -152,39 +170,22 @@ class SqlGenerator(object):
             columns = data.keys()
         set_tags = ','.join(('`{}`=%s'.format(col, col) for col in columns))
         param = tuple(data[k] for k in columns)
-        if isinstance(condition, str):
-            condition_keys = set()
-            where_tags = condition
-            condition_param = ()
-        else:
-            if isinstance(condition, dict):
-                condition_keys = set(condition.keys())
-                condition_param = tuple(condition[k] for k in condition_keys)
-            else:
-                condition_keys = set(condition)
-                condition_param = tuple(data[k] for k in condition_keys)
-
-            where_tags = ' AND '.join(('`{}`=%s'.format(col) for col in condition_keys))
-
-        param += condition_param
+        where_tags, where_param = cls.generate_where_sql(where)
+        param += where_param
         if limit:
             param += (limit,)
             sql += ' limit %s'
-
         final_sql = sql.format(table, set_tags, where_tags)
         return final_sql, param
 
     @classmethod
     def generate_delete_sql(cls, table, where: str or dict, limit: int = None):
         sql = "DELETE FROM `{}` WHERE {} "
-        if isinstance(where, dict):
-            where_str, params = cls.get_columns_and_params(where, equal=True, and_join=True)
-        else:
-            where_str, params = where, None
-        sql = sql.format(table, where_str)
+        where_tags, where_param = cls.generate_where_sql(where)
+        sql = sql.format(table, where_tags)
         if limit:
             sql += "limit {}".format(limit)
-        return sql, params
+        return sql, where_param
 
 
 class MysqlSqler(SqlGenerator):
@@ -282,7 +283,14 @@ class _SimpleConnector(SqlGenerator):
             if number == 1:
                 conn_args[k] = result[0]
             else:
-                raise ValueError("invalid param got when using {} to regxp {}".format(v, k))
+                if k == 'port':
+                    conn_args[k] = 3306
+                elif k == 'user':
+                    conn_args[k] = 'root'
+                elif k == 'host':
+                    conn_args[k] = 'localhost'
+                else:
+                    raise ValueError("解析连接命令失败，确认命令符合 mysql -uxxx -Pxxxx -pxxxx -hxxxx -Dxxxx 格式 ")
 
         return conn_args
 
@@ -398,7 +406,7 @@ class _SimpleConnector(SqlGenerator):
         仅支持 简单的查询
         """
         sql, param = self.generate_select_sql(columns, table, where, group_by, order_by, limit, offset)
-        return self.execute_sql(sql, param, **kwargs)
+        return self.execute_sql(sql, param, **kwargs)[0]
 
     def insert_into(self, table: str,  data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None, ignore=False, on_duplicate_key_update: str = None, return_id=False):
         """
@@ -433,7 +441,7 @@ class _SimpleConnector(SqlGenerator):
         sql, param = self.generate_update_sql_by_primary(table, data, pri_value, columns, primary)
         return self.execute_sql(sql, param)[1]
 
-    def update(self, table: str, data: dict, where: str or dict or Iterable, columns: Union[Tuple[str], List[str], str] = None, limit: int = None):
+    def update(self, table: str, data: dict, where: Union[dict, str], columns: Union[Tuple[str], List[str], str] = None, limit: int = None):
         """
         @data:  要被更新的数据，传入字典将会转化为  update xxx set  key=value,key2=value2 的 形式
         @columns: 限定被影响的字段。默认为空，即不限定。则传入的data字典的所有键值对都会被映射为字段和值。
@@ -545,9 +553,10 @@ class _SimplePoolConnector(MysqlConnection):
 
     def _init_connargs(self, **kwargs):
         args_dict = self._set_conn_var(**kwargs)
-        # 默认参数
+         # 默认参数，参照 sqlalchemy 的连接池参数，进行初始化配置,（除了 SET AUTOCOMMIT = 1 之外，因为这个类的事务都是底层手动提交的，只是看起来和自动提交一样)
+        # <module 'pymysql' from '/Library/Python/3.8/site-packages/pymysql/__init__.py'> 1 20 0 0 False None ['SET AUTOCOMMIT = 1'] True None 1
         connargs = {"host": self.host, "user": self.user, "password": self.password, "database": self.database, 'port': self.port, "charset": self.charset,
-                    "creator": self._creator, "mincached": 1, "maxcached": 10, "maxshared": 5, "maxconnections": 100, "blocking": True, "maxusage": 0}
+                    "creator": self._creator, "mincached": 1, "maxcached": 20,  "blocking": False}
 
         # mincached : 启动时开启的空连接数量(0代表开始时不创建连接)
         # maxcached : 连接池最大可共享连接数量(0代表不闲置连接池大小)
@@ -567,7 +576,7 @@ class _SimplePoolConnector(MysqlConnection):
         return self.connection_pool.connection()
 
 
-class CustomMysqlPool(_SimplePoolConnector, MysqlConnection):
+class MysqlPool(_SimplePoolConnector, MysqlConnection):
 
     port = 3306
     _creator = pymysql
