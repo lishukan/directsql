@@ -4,7 +4,7 @@ import traceback
 from .sqlgenerator import SqlGenerator
 from .connector import   SimpleConnector
 import re
-from psycopg2.extras import  DictCursor,DictConnection,RealDictCursor,RealDictConnection
+from psycopg2.extras import DictCursor, DictConnection, RealDictCursor, RealDictConnection
 class PgSqlGenerator(SqlGenerator):
     """
     pgsql sql语句 拼接类

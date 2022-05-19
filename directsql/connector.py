@@ -21,7 +21,19 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
+class OperationError(Exception):
+    """
+    用来查询失败时装填错误信息,同时使其bool值为False 方便识别是正常结果还是错误
+    """
+
+    def __bool__(self):
+        return False
+
+
 class Like(object):
+    """
+    用来构造 like  语句
+    """
 
     def __init__(self, string: str) -> None:
         if '%' in string:
@@ -33,6 +45,7 @@ class Like(object):
 
     def __repr__(self):
         return self.string
+
 
 class SqlGenerator(object):
     """
@@ -323,12 +336,12 @@ class _SimpleConnector(SqlGenerator):
                 yield result
                 result = cursor.fetchone()
             cursor.close()
-        except:
+        except Exception as e:
             conn.rollback()
             traceback.print_exc()
-            return False
+            return OperationError(e)
 
-    def execute_sql(self, sql: str, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type: str = None):
+    def execute_sql(self, sql: str, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type: str = None,show_error=True):
         """
         核心方法,执行sql
         # cursor_type为游标类型（默认返回值为元祖类型），可选字典游标，将返回数据的字典形式
@@ -344,13 +357,15 @@ class _SimpleConnector(SqlGenerator):
             conn.commit()
             result = cursor.fetchall()  # 此方法应直接返回 所有结果，不应去考虑fetchone还是fetchmany的问题。这是传入的sql中就应该限定的
         except Exception as e:
-            self.logger.warning("---------------------------------")
-            self.logger.error(str(e))
-            self.logger.error(sql)
-            # self.logger.error(param) #参数太长了，不要打印
-            self.logger.error(traceback.format_exc())
-            self.logger.info("---------------------------------")
+            if show_error:
+                self.logger.warning("---------------------------------")
+                self.logger.error(str(e))
+                self.logger.error(sql)
+                # self.logger.error(param) #参数太长了，不要打印
+                self.logger.error(traceback.format_exc())
+                self.logger.info("---------------------------------")
             conn.rollback()
+            result = count = OperationError(e)
         finally:
             return result, count
 
@@ -362,17 +377,18 @@ class _SimpleConnector(SqlGenerator):
         cursor = self._get_cursor(conn)
         result = False
         try:
-            r = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
+            cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
             cursor.execute("SELECT LAST_INSERT_ID() AS id")
             result = cursor.fetchall()[0][0]
             conn.commit()
-        except:
+        except Exception as e:
             self.logger.info("---------------------------------")
             self.logger.error(sql)
             # self.logger.error(param)
             self.logger.info("---------------------------------")
             conn.rollback()
             traceback.print_exc()
+            result = OperationError(e)
         finally:
             return result
 
@@ -394,9 +410,10 @@ class _SimpleConnector(SqlGenerator):
                 count = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
             result = cursor.fetchall()
             conn.commit()
-        except:
+        except Exception as e:
             conn.rollback()
             traceback.print_exc()
+            result = count = OperationError(e)
         finally:
             return result, count
 
@@ -408,7 +425,7 @@ class _SimpleConnector(SqlGenerator):
         sql, param = self.generate_select_sql(columns, table, where, group_by, order_by, limit, offset)
         return self.execute_sql(sql, param, **kwargs)[0]
 
-    def insert_into(self, table: str,  data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None, ignore=False, on_duplicate_key_update: str = None, return_id=False):
+    def insert_into(self, table: str,  data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None, ignore=False, on_duplicate_key_update: str = None, return_id=False, **kwargs):
         """
         @data: 字典或字典列表（批量插入）  
         @columns: 哪些字段需要被插入。默认是传入的data的所有键。当data中有多余字段时，可以通过columns指定哪些字段需要作为新数据的字段插入
@@ -417,18 +434,18 @@ class _SimpleConnector(SqlGenerator):
         @return_id:  True ->返回最后一条插入语句的id   ，默认False 返回受影响的条数
         """
         sql, param = self.generate_insert_sql(table, data, columns, ignore, on_duplicate_key_update)
-        return self.execute_with_return_id(sql, param) if return_id else self.execute_sql(sql, param)[1]
+        return self.execute_with_return_id(sql, param, **kwargs) if return_id else self.execute_sql(sql, param, **kwargs)[1]
 
-    def replace_into(self, table: str, data: dict or list, columns: Union[Tuple[str], List[str], str] = None):
+    def replace_into(self, table: str, data: dict or list, columns: Union[Tuple[str], List[str], str] = None, **kwargs):
         """
         将传入的字典或字典列表 replcae into 
         返回受影响的行数
         @columns: 限定影响的字段
         """
         sql, param = self.generate_replace_into_sql(table, data, columns)
-        return self.execute_sql(sql, param)[1]
+        return self.execute_sql(sql, param, **kwargs)[1]
 
-    def update_by_primary(self, table: str, data: dict, pri_value, columns=None, cache=True):
+    def update_by_primary(self, table: str, data: dict, pri_value, columns=None, cache=True,**kwargs):
         """
         通过主键去更新
         @pri_value :主键的值
@@ -439,9 +456,9 @@ class _SimpleConnector(SqlGenerator):
         """
         primary = self._get_primary_key(table, cache)
         sql, param = self.generate_update_sql_by_primary(table, data, pri_value, columns, primary)
-        return self.execute_sql(sql, param)[1]
+        return self.execute_sql(sql, param,**kwargs)[1]
 
-    def update(self, table: str, data: dict, where: Union[dict, str], columns: Union[Tuple[str], List[str], str] = None, limit: int = None):
+    def update(self, table: str, data: dict, where: Union[dict, str], columns: Union[Tuple[str], List[str], str] = None, limit: int = None,**kwargs):
         """
         @data:  要被更新的数据，传入字典将会转化为  update xxx set  key=value,key2=value2 的 形式
         @columns: 限定被影响的字段。默认为空，即不限定。则传入的data字典的所有键值对都会被映射为字段和值。
@@ -453,9 +470,9 @@ class _SimpleConnector(SqlGenerator):
             -->  update  xx set `age`=18,`gender`=0 where `name`="jack"
         """
         sql, param = self.generate_update_sql(table, data, where, columns, limit)
-        return self.execute_sql(sql, param)[1]
+        return self.execute_sql(sql, param,**kwargs)[1]
 
-    def delete_by_primary(self, table: str, pri_value, cache=True):
+    def delete_by_primary(self, table: str, pri_value, cache=True,**kwargs):
         """
         通过主键删除数据，这里要先查出主键，不允许指定，即使大部分场景下主键是id。
         @pri_value :主键的值
@@ -464,7 +481,7 @@ class _SimpleConnector(SqlGenerator):
         """
         primary = self._get_primary_key(table, cache)
         sql = "DELETE FROM {} WHERE `{}`=%s ".format(table, primary)
-        return self.execute_sql(sql, (pri_value,))[1]
+        return self.execute_sql(sql, (pri_value,),**kwargs)[1]
 
     def _get_primary_key(self, table: str, cache=True):
         """
@@ -482,14 +499,14 @@ class _SimpleConnector(SqlGenerator):
                 self._primary_key_cache[table] = primary
         return primary
 
-    def delete(self, table: str, where: str or dict, limit: int = None):
+    def delete(self, table: str, where: str or dict, limit: int = None, **kwargs):
         """
         根据传入的条件 删除对应的数据
         必须传入条件，避免因为漏参数而删除整个表。
         返回受影响的条数 
         """
-        sql, param = self.generate_delete_sql(table, where, limit)
-        return self.execute_sql(sql, param)[1]
+        sql, param = self.generate_delete_sql(table, where, limit, **kwargs)
+        return self.execute_sql(sql, param, **kwargs)[1]
 
     def get_multiqueries(self, sql: str or list, params: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type=None):
         """
@@ -517,18 +534,18 @@ class _SimpleConnector(SqlGenerator):
                 results.append(cursor.fetchall())
             conn.commit()  # 这个要在最后进行提交
             return results
-        except Exception:
+        except Exception as e:
             cursor.close()
             conn.rollback()
             traceback.print_exc()
-            return False
+            return OperationError(e)
 
 
 class MysqlConnection(MysqlSqler, _SimpleConnector):
 
     charset = "utf8mb4"
 
-    def merge_into(self, table: str, data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None, merge_columns: Union[Tuple[str], List[str], str] = None):
+    def merge_into(self, table: str, data: dict or List[dict], columns: Union[Tuple[str], List[str], str] = None, merge_columns: Union[Tuple[str], List[str], str] = None, **kwargs):
         """
         合并数据。mysql 不支持原生的merge into。这里通过 insert into ... on duplicate key update ...来实现
         @data:需要被合并的数据
@@ -536,8 +553,8 @@ class MysqlConnection(MysqlSqler, _SimpleConnector):
         @merge_columns:产生重复时，需要被更新的字段，默认是全部受影响的字段都被覆盖
         返回受影响的条数
         """
-        sql, param = self.generate_merge_sql(table, data, columns, merge_columns)
-        return self.execute_sql(sql, param)[1]
+        sql, param = self.generate_merge_sql(table, data, columns, merge_columns, **kwargs)
+        return self.execute_sql(sql, param, **kwargs)[1]
 
     @property
     def tables(self):
@@ -553,10 +570,10 @@ class _SimplePoolConnector(MysqlConnection):
 
     def _init_connargs(self, **kwargs):
         args_dict = self._set_conn_var(**kwargs)
-         # 默认参数，参照 sqlalchemy 的连接池参数，进行初始化配置,（除了 SET AUTOCOMMIT = 1 之外，因为这个类的事务都是底层手动提交的，只是看起来和自动提交一样)
+        # 默认参数，参照 sqlalchemy 的连接池参数，进行初始化配置,（除了 SET AUTOCOMMIT = 1 之外，因为这个类的事务都是底层手动提交的，只是看起来和自动提交一样)
         # <module 'pymysql' from '/Library/Python/3.8/site-packages/pymysql/__init__.py'> 1 20 0 0 False None ['SET AUTOCOMMIT = 1'] True None 1
         connargs = {"host": self.host, "user": self.user, "password": self.password, "database": self.database, 'port': self.port, "charset": self.charset,
-                    "creator": self._creator, "mincached": 1, "maxcached": 20,  "blocking": False}
+                    "creator": self._creator, "mincached": 1, "maxcached": 20, "blocking": False}
 
         # mincached : 启动时开启的空连接数量(0代表开始时不创建连接)
         # maxcached : 连接池最大可共享连接数量(0代表不闲置连接池大小)
