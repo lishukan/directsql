@@ -157,6 +157,8 @@ class SqlGenerator(object):
                     where_tags.append('( `{}` >=%s and `{}` <=%s )'.format(key, key))
                     condition_param.extend([value[0], value[1]])
                 elif isinstance(value, list):
+                    if not value:
+                        continue
                     where_tags.append(' `{}` in ({}) '.format(key, ','.join(['%s'] * len(value))))
                     condition_param.extend(value)
                 elif isinstance(value, Like):
@@ -341,7 +343,7 @@ class _SimpleConnector(SqlGenerator):
             traceback.print_exc()
             return OperationError(e)
 
-    def execute_sql(self, sql: str, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type: str = None,show_error=True):
+    def execute_sql(self, sql: str, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type: str = None, show_error=True):
         """
         核心方法,执行sql
         # cursor_type为游标类型（默认返回值为元祖类型），可选字典游标，将返回数据的字典形式
@@ -377,7 +379,7 @@ class _SimpleConnector(SqlGenerator):
         cursor = self._get_cursor(conn)
         result = False
         try:
-            cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
+            r = cursor.executemany(sql, param) if isinstance(param, list) else cursor.execute(sql, param)
             cursor.execute("SELECT LAST_INSERT_ID() AS id")
             result = cursor.fetchall()[0][0]
             conn.commit()
@@ -445,7 +447,7 @@ class _SimpleConnector(SqlGenerator):
         sql, param = self.generate_replace_into_sql(table, data, columns)
         return self.execute_sql(sql, param, **kwargs)[1]
 
-    def update_by_primary(self, table: str, data: dict, pri_value, columns=None, cache=True,**kwargs):
+    def update_by_primary(self, table: str, data: dict, pri_value, columns=None, cache=True, **kwargs):
         """
         通过主键去更新
         @pri_value :主键的值
@@ -456,9 +458,9 @@ class _SimpleConnector(SqlGenerator):
         """
         primary = self._get_primary_key(table, cache)
         sql, param = self.generate_update_sql_by_primary(table, data, pri_value, columns, primary)
-        return self.execute_sql(sql, param,**kwargs)[1]
+        return self.execute_sql(sql, param, **kwargs)[1]
 
-    def update(self, table: str, data: dict, where: Union[dict, str], columns: Union[Tuple[str], List[str], str] = None, limit: int = None,**kwargs):
+    def update(self, table: str, data: dict, where: Union[dict, str], columns: Union[Tuple[str], List[str], str] = None, limit: int = None, **kwargs):
         """
         @data:  要被更新的数据，传入字典将会转化为  update xxx set  key=value,key2=value2 的 形式
         @columns: 限定被影响的字段。默认为空，即不限定。则传入的data字典的所有键值对都会被映射为字段和值。
@@ -470,9 +472,9 @@ class _SimpleConnector(SqlGenerator):
             -->  update  xx set `age`=18,`gender`=0 where `name`="jack"
         """
         sql, param = self.generate_update_sql(table, data, where, columns, limit)
-        return self.execute_sql(sql, param,**kwargs)[1]
+        return self.execute_sql(sql, param, **kwargs)[1]
 
-    def delete_by_primary(self, table: str, pri_value, cache=True,**kwargs):
+    def delete_by_primary(self, table: str, pri_value, cache=True, **kwargs):
         """
         通过主键删除数据，这里要先查出主键，不允许指定，即使大部分场景下主键是id。
         @pri_value :主键的值
@@ -565,12 +567,12 @@ class MysqlConnection(MysqlSqler, _SimpleConnector):
         return self._tables
 
 
-class _SimplePoolConnector(MysqlConnection):
+class _SimplePoolConnector(object):
     _creator = None
 
     def _init_connargs(self, **kwargs):
         args_dict = self._set_conn_var(**kwargs)
-        # 默认参数，参照 sqlalchemy 的连接池参数，进行初始化配置,（除了 SET AUTOCOMMIT = 1 之外，因为这个类的事务都是底层手动提交的，只是看起来和自动提交一样)
+         # 默认参数，参照 sqlalchemy 的连接池参数，进行初始化配置,（除了 SET AUTOCOMMIT = 1 之外，因为这个类的事务都是底层手动提交的，只是看起来和自动提交一样)
         # <module 'pymysql' from '/Library/Python/3.8/site-packages/pymysql/__init__.py'> 1 20 0 0 False None ['SET AUTOCOMMIT = 1'] True None 1
         connargs = {"host": self.host, "user": self.user, "password": self.password, "database": self.database, 'port': self.port, "charset": self.charset,
                     "creator": self._creator, "mincached": 1, "maxcached": 20, "blocking": False}

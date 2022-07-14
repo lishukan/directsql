@@ -25,11 +25,11 @@ class MysqlQueryUtil(MysqlPool):
         """
         where_conditions = [] if not kwargs.get('where_conditions') else kwargs.get('where_conditions')
         params = [] if not kwargs.get('params') else kwargs.get('params')
+        fuzzy_search = kwargs.get('fuzzy_search', ())  # 支持模糊查找的字段
         for key, value in formdata.items():
             if exclude:
                 if key in exclude:
                     continue
-            fuzzy_search = kwargs.get('fuzzy_search', ())  # 支持模糊查找的字段
             if isinstance(value, str):
                 value = value.strip()
                 if cls.blank_pattern.findall(key):
@@ -53,6 +53,10 @@ class MysqlQueryUtil(MysqlPool):
                             break
                     if datetime_pattern:
                         continue
+            elif isinstance(value, list):
+                where_conditions.append(' `{}` in  ({})'.format(key, ','.join(['%s'] * len(value))))
+                params.extend(value)
+                continue
             where_conditions.append(" `{}` = %s ".format(key))
             params.append(value)
 
@@ -141,3 +145,20 @@ class MysqlQueryUtil(MysqlPool):
             return [], 0
         else:
             return results[0], results[1][0]['count'],
+
+    def update_by_condition(self, table, data, where, **kwargs):
+        """
+        通过查询条件去更新某个表
+        """
+        where_copy = where.copy()
+        for k, v in where_copy.items():
+            if isinstance(v, list) and len(v) == 0:
+                del where[k]
+        where_sql, where_params = self.generator_where_condition(where, **kwargs)
+        if where_sql.startswith(' where'):  # 空格打头的（上一步生成的sql里有where 打头的）
+            where_sql = where_sql[6:]
+        else:
+            raise ValueError("批量更新必须传入筛选条件")
+        sql, data_param = self.generate_update_sql(table, data, where_sql)
+        last_param = data_param+tuple(where_params)
+        return self.execute_sql(sql=sql, param=last_param)[1]
