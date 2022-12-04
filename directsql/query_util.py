@@ -4,6 +4,7 @@ from .connector import MysqlPool
 """
 一个处理web请求的工具类，目的是方便在web开发中 调用查询sql。
 """
+
 class MysqlQueryUtil(MysqlPool):
 
     datetime_range_pattern = {
@@ -39,6 +40,18 @@ class MysqlQueryUtil(MysqlPool):
                     where_conditions.append(' `{}` in  ({})'.format(key, ','.join(['%s'] * len(vals))))
                     params.extend(vals)
                     continue
+                elif value == '$notnull':
+                    where_conditions.append(" `{}` is not null ".format(key))
+                    continue
+                elif value == '$null':
+                    where_conditions.append(" `{}` is null ".format(key))
+                    continue
+                elif value == "$<>''":
+                    where_conditions.append(" `{}` <> '' ".format(key))
+                    continue
+                elif value == "$''":
+                    where_conditions.append(" `{}` = '' ".format(key))
+                    continue
                 elif fuzzy_search and key in fuzzy_search:
                     where_conditions.append(" `{}` like '%%{}%%' ".format(key, value))
                     continue
@@ -59,7 +72,6 @@ class MysqlQueryUtil(MysqlPool):
                 continue
             where_conditions.append(" `{}` = %s ".format(key))
             params.append(value)
-
         if where_conditions:
             return ' where ' + ' AND '.join(where_conditions), params
         else:

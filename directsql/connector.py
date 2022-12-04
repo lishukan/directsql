@@ -343,7 +343,7 @@ class _SimpleConnector(SqlGenerator):
             traceback.print_exc()
             return OperationError(e)
 
-    def execute_sql(self, sql: str, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type: str = None, show_error=True):
+    def execute_sql(self, sql: str, param: Union[tuple, dict, List[tuple], List[dict]] = None, cursor_type: str = None):
         """
         核心方法,执行sql
         # cursor_type为游标类型（默认返回值为元祖类型），可选字典游标，将返回数据的字典形式
@@ -359,13 +359,12 @@ class _SimpleConnector(SqlGenerator):
             conn.commit()
             result = cursor.fetchall()  # 此方法应直接返回 所有结果，不应去考虑fetchone还是fetchmany的问题。这是传入的sql中就应该限定的
         except Exception as e:
-            if show_error:
-                self.logger.warning("---------------------------------")
-                self.logger.error(str(e))
-                self.logger.error(sql)
-                # self.logger.error(param) #参数太长了，不要打印
-                self.logger.error(traceback.format_exc())
-                self.logger.info("---------------------------------")
+            self.logger.warning("---------------------------------")
+            self.logger.error(str(e))
+            self.logger.error(sql)
+            # self.logger.error(param) #参数太长了，不要打印
+            self.logger.error(traceback.format_exc())
+            self.logger.info("---------------------------------")
             conn.rollback()
             result = count = OperationError(e)
         finally:
