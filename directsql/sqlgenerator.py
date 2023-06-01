@@ -33,7 +33,7 @@ class SqlGenerator(object):
         return columns_condi, tuple(params)
 
     @classmethod
-    def generate_select_sql(cls, columns='id', table=None, where=None, group_by: str = None, order_by: str = None, limit: int = None, offset=None):
+    def generate_select_sql(cls, columns, table, where=None, group_by: str = None, order_by: str = None, limit: int = None, offset=None):
         """
         设要查询两个字段id和name，则 columns_u_need 为（'id','name'） / ['id','name']  /  'id,name'
         要查询所有字段 使用  columns_u_need='*' 即可

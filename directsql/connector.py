@@ -190,7 +190,7 @@ class SimpleConnector(SqlGenerator):
         finally:
             return result, count
 
-    def select(self, columns='id', table=None, where=None, group_by: str = None, order_by: str = None, limit: int = None, offset=None,cursor_type=None):
+    def select(self, columns, table, where=None, group_by: str = None, order_by: str = None, limit: int = None, offset=None,cursor_type=None):
         """
         仅支持 简单的查询
         """
