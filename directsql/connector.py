@@ -80,7 +80,7 @@ class SimpleConnector(SqlGenerator):
             if number==1:
                 conn_args[k] = result[0]
             else:
-                raise ValueError("invalid param got when using {} to regxp ".format(v))
+                raise ValueError("invalid param got when using {} to regxp {}".format(v,k))
         
         return conn_args
 
@@ -226,6 +226,30 @@ class SimpleConnector(SqlGenerator):
     def delete(self,table, where: str or dict, limit: int = 0):
         sql, param = self.generate_delete_sql(table, where, limit)
         return self.execute_sql(sql, param)[1]
+
+    def get_multiqueries(self,sql,params=None,cursor_type=None):
+        """
+        同时执行多个sql ，一次性返回所有结果集.
+        sql 是以 分号； 进行分割的多条语句
+        @queries : [(sql1,param1),(sql2,param2),...]
+        @cursor_type : dict or None
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor(DictCursor) if cursor_type == 'dict' else conn.cursor() #此处由于需要返回查询结果集，所以不支持流式游标
+        try:
+            cursor.execute(sql,params)
+            results=[]
+            results.append(cursor.fetchall())
+            while cursor.nextset():
+                results.append(cursor.fetchall())
+            conn.commit()#这个要在最后进行提交
+            return results
+        except Exception  :
+            cursor.close()
+            conn.rollback()
+            traceback.print_exc()
+            return False
+
 
 
 class MysqlConnection(MysqlSqler, SimpleConnector):

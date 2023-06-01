@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
   
 setup(  
     name = 'directsql',  
-    version = '0.2.5',
+    version = '0.2.6',
     # keywords = ('chinesename',),  
     description="""一个简单的使用python操作mysql的工具，提供了一些类似sql语法的方法，最终拼接成sql。可以很好地处理一些常见场景，不依赖orm 的同时避免手写大量sql。""",  
     license = 'MIT License',  
@@ -17,6 +17,9 @@ setup(
     ]
 )
 """
+先把__init__.py 中的版本号和setup.py 中的版本号改下
+
+然后
 python3 setup.py bdist_wheel --universal    #编译 纯python的wheel包
 python3 setup.py sdist   #编译 源码压缩包
 任选其一 
