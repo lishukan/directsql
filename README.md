@@ -56,10 +56,10 @@ from directsql.connector import MysqlConnection,MysqlConnector
     
  #2 直接使用 字符串   
     #以下字符串是常用的终端 连接命令
-    string_arg="mysql -uroot -h127.0.0.1 -P3306 -p123456  -Dtest_base"  
-    conn = MysqlConnection(string_arg=string_arg)
+    conn_cmd="mysql -uroot -h127.0.0.1 -P3306 -p123456  -Dtest_base"  
+    conn = MysqlConnection(conn_cmd=conn_cmd)
     print(conn.database)
-    conn = MysqlPool(string_arg=string_arg)
+    conn = MysqlPool(conn_cmd=conn_cmd)
     print(conn.database)
    
     
@@ -84,7 +84,7 @@ from directsql.connector import MysqlConnection,MysqlConnector
 
 
 ```python
-conn = MysqlConnection(string_arg="mysql -uroot -h127.0.0.1 -P3306 -p123456  -Dtest")
+conn = MysqlConnection(conn_cmd="mysql -uroot -h127.0.0.1 -P3306 -p123456  -Dtest")
 result,count=conn.execute_sql("select * from  test_table ")
 print(result)
 print(count)
@@ -336,3 +336,13 @@ for data in result:
 	print(data)
 ```
 
+
+### 11 同时执行多条不同的sql
+
+``` def get_multiqueries(self, sql: str or list, params=None, cursor_type='default'):```
+<font color='red'>使用该方法必须在实例化连接时引入client_flag参数。参考:https://blog.csdn.net/qq_33634196/article/details/119883045</font>
+
+```python
+sql = "show tables;select * from test_table limit 1"
+print(conn.get_multiqueries(sql=sql))
+```
